@@ -13,9 +13,9 @@ Shared 40 for 40 context lives in `../AGENTS.md`.
 ## Decided
 
 - The assistant reuses the Sous brain: a markdown vault per person, live Claude turns, and a reflection after each conversation that files what it learned.
-- People reach it on WhatsApp through Meta's WhatsApp Cloud API, starting on Meta's test number.
+- People reach it on WhatsApp through Twilio's WhatsApp sandbox. We dropped Meta's WhatsApp Cloud API on 10 November. The Meta route is still in the code but isn't used.
 - One Worker, with the webhook route and the Durable Object together.
-- A person is known by what Meta's verified webhook says about the sender, never by anything typed in a message. There's no sign-in.
+- A person is known by the sender in a webhook whose signature checks out, never by anything typed in a message. There's no sign-in.
 - `/forget` deletes everything the brain holds about the sender.
 - Deploys go through CI, never by hand.
 - Poppy only suggests play activities and records how they went. Anything else is politely out of scope.
