@@ -8,6 +8,11 @@ describe("LIVE_PROMPT", () => {
     }
   });
 
+  it("suggests first and asks after, never holding a suggestion back for a question", () => {
+    expect(LIVE_PROMPT).toContain("Suggest first, ask after.");
+    expect(LIVE_PROMPT).not.toContain("Don't suggest anything until you know");
+  });
+
   it("only ever asks for WhatsApp's single-asterisk bold", () => {
     expect(LIVE_PROMPT).not.toMatch(/\*\*[^*\n]+\*\*/);
   });
