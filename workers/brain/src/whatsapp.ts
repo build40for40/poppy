@@ -24,8 +24,8 @@ export interface Address {
   sender?: string;
 }
 
-/** The two ways a WhatsApp message can reach us: Meta's Cloud API, or Twilio's WhatsApp sandbox as the fallback. */
-export type Provider = "meta" | "twilio";
+/** How a message can reach us: Meta's Cloud API, Twilio's WhatsApp sandbox as the fallback, or the demo chat on the landing page. */
+export type Provider = "meta" | "twilio" | "web";
 
 export interface Incoming extends Address {
   /** WhatsApp's message id (`wamid...`), used to drop repeat deliveries and to mark the message read. */
@@ -50,7 +50,7 @@ export interface WhatsAppConfig {
  */
 export function identityOf(address: Address): string {
   const id = address.userId ?? address.phone ?? "";
-  return address.provider === "twilio" ? `twilio:${id}` : id;
+  return address.provider === "twilio" || address.provider === "web" ? `${address.provider}:${id}` : id;
 }
 
 /** The name of a person's Durable Object: a hash, so no phone number ends up in an object name or a log line. */

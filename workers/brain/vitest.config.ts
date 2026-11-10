@@ -12,6 +12,8 @@ export default defineConfig({
         // These also override anything in a local .dev.vars, so a developer's ECHO_MODE or real keys never reach a test.
         bindings: {
           ECHO_MODE: "",
+          TWILIO_REPLY_INLINE: "",
+          WEB_CHAT: "",
           DEV_TOOLS: "",
           WHATSAPP_API_BASE: "",
           IDLE_MINUTES: "",

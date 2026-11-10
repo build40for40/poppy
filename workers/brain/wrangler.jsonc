@@ -11,6 +11,13 @@
     "ECHO_MODE": "",
     // Only for Twilio behind a tunnel: the tunnel's address, so the signature check knows the URL Twilio called.
     "PUBLIC_BASE_URL": "",
+    // "true" sends the reply to a Twilio message back in the webhook's own answer (TwiML) and not through Twilio's API.
+    // It's on because the Twilio account can't send through the API until its compliance profile is approved. A reply
+    // that takes longer than Twilio waits, and the check-in nudge, still go through the API. Set it to "" once sending works.
+    "TWILIO_REPLY_INLINE": "true",
+    // "true" switches on the demo chat the landing page talks to, at /poppy/api/web. It's public and unsigned, so it's
+    // capped: a few messages per visitor, a ceiling per day, and each visitor's brain is deleted after a day.
+    "WEB_CHAT": "true",
     // Where Twilio and Meta fetch the picture on a suggestion. They fetch it themselves, so it has to be public.
     "PICTURES_BASE_URL": "https://build40for40.com/poppy/api/pictures"
   },
@@ -24,14 +31,20 @@
   "durable_objects": {
     "bindings": [
       { "name": "USER_BRAIN", "class_name": "UserBrain" },
-      { "name": "PICTURE_SHELF", "class_name": "PictureShelf" }
+      { "name": "PICTURE_SHELF", "class_name": "PictureShelf" },
+      { "name": "WEB_GATE", "class_name": "WebGate" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["UserBrain"] },
-    { "tag": "v2", "new_sqlite_classes": ["PictureShelf"] }
+    { "tag": "v2", "new_sqlite_classes": ["PictureShelf"] },
+    { "tag": "v3", "new_sqlite_classes": ["WebGate"] }
   ],
+  // The landing page is one HTML file, bundled in as text and served at /poppy.
+  "rules": [{ "type": "Text", "globs": ["**/*.html"], "fallthrough": true }],
   "routes": [
+    { "pattern": "build40for40.com/poppy", "zone_name": "build40for40.com" },
+    { "pattern": "build40for40.com/poppy/", "zone_name": "build40for40.com" },
     { "pattern": "build40for40.com/poppy/api", "zone_name": "build40for40.com" },
     { "pattern": "build40for40.com/poppy/api/*", "zone_name": "build40for40.com" }
   ],

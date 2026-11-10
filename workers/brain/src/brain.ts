@@ -44,6 +44,15 @@ export const REPLIES = {
 };
 
 /** How replies get back to a person: the provider their messages arrive through. */
+/** One reply as it leaves the brain: the text, and the URL of the picture that goes on top of it, if any. */
+export interface Reply {
+  text: string;
+  picture: string | null;
+}
+
+/** A demo chat from the landing page is wiped this long after its first message. */
+export const WEB_LIFE_MS = 24 * 60 * 60_000;
+
 interface Channel {
   /** Sends a reply, with a picture on top when there's a picture URL. */
   send(to: Address, text: string, picture?: string): Promise<void>;
@@ -129,6 +138,10 @@ export interface SessionView {
  */
 export class UserBrain extends DurableObject<Env> {
   private ready = false;
+  /** True while the inbox is being answered, by the alarm or by `answerNow`. Two runs can't share the inbox. */
+  private working = false;
+  /** Set while `answerNow` is collecting the reply to hand back in the answer to the request that brought the message. */
+  private inline: { until: number; replies: Reply[] } | null = null;
 
   private get sql(): SqlStorage {
     return this.ctx.storage.sql;
@@ -154,6 +167,75 @@ export class UserBrain extends DurableObject<Env> {
   /** Stores one incoming message and wakes the alarm. A message id seen before is dropped, since Meta redelivers webhooks. */
   async receive(message: Incoming): Promise<"queued" | "duplicate"> {
     this.init();
+    if (!this.store(message)) return "duplicate";
+    await this.ctx.storage.setAlarm(Date.now());
+    return "queued";
+  }
+
+  /**
+   * Stores one incoming message and answers it straight away, handing the reply back for the answer to the request that
+   * brought it: Twilio's webhook, in place of a call to Twilio's API, or the landing page's demo chat. Only what's ready
+   * within `waitMs` comes back, because the caller stops waiting. For Twilio anything later goes through the API as usual.
+   * The rest of the alarm's work (ending chats, reflection, the nudge) is left to the alarm.
+   */
+  async answerNow(message: Incoming, waitMs: number): Promise<Reply[]> {
+    this.init();
+    if (!this.store(message)) return [];
+    // An alarm run is already answering the inbox, so this message joins its next turn.
+    if (this.working) {
+      await this.ctx.storage.setAlarm(Date.now());
+      return [];
+    }
+    const inline = { until: Date.now() + waitMs, replies: [] as Reply[] };
+    this.working = true;
+    this.inline = inline;
+    try {
+      await this.answerInbox();
+    } finally {
+      this.inline = null;
+      this.working = false;
+    }
+    if (this.ready) await this.ctx.storage.setAlarm(Date.now());
+    return inline.replies;
+  }
+
+  /** How many more messages a demo chat from the landing page may send. A chat past its day is wiped first, so it starts again. */
+  async webAllowance(max: number): Promise<number> {
+    this.init();
+    if (this.webExpired()) {
+      await this.wipe();
+      this.init();
+    }
+    return Math.max(0, max - Number(this.setting("web_count") ?? 0));
+  }
+
+  /** Answers one message from the landing page's demo chat and counts it against that visitor's allowance. */
+  async answerWeb(message: Incoming, waitMs: number, max: number): Promise<{ replies: Reply[]; left: number }> {
+    const left = await this.webAllowance(max);
+    if (left <= 0) return { replies: [], left: 0 };
+    if (!this.setting("web_first_at")) this.saveSetting("web_first_at", new Date().toISOString());
+    this.saveSetting("web_count", String(max - left + 1));
+    return { replies: await this.answerNow(message, waitMs), left: left - 1 };
+  }
+
+  private webExpired(): boolean {
+    const first = this.setting("web_first_at");
+    return first !== null && Date.now() - Date.parse(first) >= WEB_LIFE_MS;
+  }
+
+  private get isWeb(): boolean {
+    return this.setting("provider") === "web";
+  }
+
+  private setting(key: string): string | null {
+    return this.sql.exec<{ value: string }>("SELECT value FROM settings WHERE key = ?", key).toArray()[0]?.value ?? null;
+  }
+
+  private saveSetting(key: string, value: string): void {
+    this.sql.exec("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value", key, value);
+  }
+
+  private store(message: Incoming): boolean {
     const stored = this.sql
       .exec(
         "INSERT INTO inbox (message_id, kind, text, received_at) VALUES (?, ?, ?, ?) ON CONFLICT (message_id) DO NOTHING RETURNING seq",
@@ -163,20 +245,37 @@ export class UserBrain extends DurableObject<Env> {
         new Date().toISOString(),
       )
       .toArray();
-    if (!stored.length) return "duplicate";
+    if (!stored.length) return false;
     this.saveAddress(message);
-    await this.ctx.storage.setAlarm(Date.now());
-    return "queued";
+    return true;
   }
 
   async alarm(): Promise<void> {
     this.init();
+    // `answerNow` is mid-reply. Come back once it's done.
+    if (this.working) {
+      await this.ctx.storage.setAlarm(Date.now() + 1_000);
+      return;
+    }
+    this.working = true;
+    try {
+      await this.work();
+    } finally {
+      this.working = false;
+    }
+  }
+
+  private async work(): Promise<void> {
+    // A demo chat from the landing page lasts a day, then everything it held is deleted.
+    if (this.webExpired()) return this.wipe();
     const tried = new Set<string>();
     do {
       await this.answerInbox();
       // A /forget with nothing after it leaves the object empty, and it stays that way: no tables, no alarm.
       if (!this.ready) return;
       this.endExpiredSessions(new Date());
+      // A demo chat is thrown away within a day, so it isn't reflected on and nobody is there to nudge.
+      if (this.isWeb) continue;
       await this.reflectOnEndedSessions(tried);
       await this.nudge(new Date());
       // A message that arrived during a reflection is answered before the alarm rests.
@@ -546,9 +645,11 @@ export class UserBrain extends DurableObject<Env> {
     const deadlines: number[] = [];
     const open = this.openSession();
     if (open) deadlines.push(Date.parse(open.last_message_at) + this.idleMs, Date.parse(nextLondonMidnight(new Date(now).toISOString())));
+    const webFirst = this.setting("web_first_at");
     const play = openPlay(this.sql);
-    if (play && !play.nudgedAt && !open) deadlines.push(nudgeDue(play, this.nudgeAfterMinutes));
-    if (this.env.ANTHROPIC_API_KEY) deadlines.push(...this.pendingReflections().map((row) => Date.parse(row.reflect_after ?? row.ended_at!)));
+    if (play && !play.nudgedAt && !open && !webFirst) deadlines.push(nudgeDue(play, this.nudgeAfterMinutes));
+    if (webFirst) deadlines.push(Date.parse(webFirst) + WEB_LIFE_MS);
+    else if (this.env.ANTHROPIC_API_KEY) deadlines.push(...this.pendingReflections().map((row) => Date.parse(row.reflect_after ?? row.ended_at!)));
     this.sql.exec("DELETE FROM inbox WHERE handled_at IS NOT NULL AND handled_at < ?", new Date(now - INBOX_KEEP_MS).toISOString());
     // Nothing is awaited between the last inbox check and this, so no message slips in unanswered; one arriving later sets the alarm to now itself.
     if (deadlines.length) await this.ctx.storage.setAlarm(Math.max(Math.min(...deadlines), now + 1_000));
@@ -580,12 +681,28 @@ export class UserBrain extends DurableObject<Env> {
 
   private address(): Address | null {
     const get = (key: string) => this.sql.exec<{ value: string }>("SELECT value FROM settings WHERE key = ?", key).toArray()[0]?.value ?? null;
-    const address: Address = { phone: get("phone"), userId: get("user_id"), provider: get("provider") === "twilio" ? "twilio" : "meta", sender: get("sender") ?? undefined };
+    const address: Address = { phone: get("phone"), userId: get("user_id"), provider: get("provider") === "twilio" ? "twilio" : get("provider") === "web" ? "web" : "meta", sender: get("sender") ?? undefined };
     return address.phone || address.userId ? address : null;
   }
 
   /** The send side of a provider, or null while its secrets aren't set. */
   private channel({ provider, sender }: Address): Channel | null {
+    // The reply rides back in the answer to the request that brought the message, while that request is still waiting.
+    const handBack = (text: string, picture?: string): boolean => {
+      const inline = this.inline;
+      if (!inline || Date.now() >= inline.until) return false;
+      inline.replies.push({ text, picture: picture ?? null });
+      return true;
+    };
+    if (provider === "web") {
+      return {
+        send: async (_to, text, picture) => {
+          // The page has stopped waiting and there's no other way to reach it.
+          if (!handBack(text, picture)) console.warn(JSON.stringify({ event: "web_reply_dropped" }));
+        },
+        markRead: async () => {},
+      };
+    }
     if (provider === "twilio") {
       const { TWILIO_ACCOUNT_SID: accountSid, TWILIO_AUTH_TOKEN: authToken } = this.env;
       const senders = twilioSenders(this.env.TWILIO_WHATSAPP_FROM);
@@ -594,7 +711,8 @@ export class UserBrain extends DurableObject<Env> {
       const config = { accountSid, authToken, from, gapMs: TWILIO_SEND_GAP_MS };
       return {
         send: async (to, text, picture) => {
-          if (to.phone) await sendTwilioText(config, to.phone, text, picture);
+          // After the webhook has stopped waiting, the reply goes through the API.
+          if (!handBack(text, picture) && to.phone) await sendTwilioText(config, to.phone, text, picture);
         },
         // Twilio's sandbox has no read receipt or typing indicator to set.
         markRead: async () => {},

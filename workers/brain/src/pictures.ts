@@ -79,11 +79,11 @@ export function checkBody(body: string): { body: string } | { error: string } {
   if (!tags.length) return { error: "The drawing has no shapes." };
   if (trimmed.replace(/<[^>]*>/g, "").trim()) return { error: "The drawing has text outside its tags." };
   for (const tag of tags) {
-    const open = tag.match(/^<\s*([a-z]+)((?:\s+[a-z-]+\s*=\s*"[^"<>]*")*)\s*\/?\s*>$/i);
+    const open = tag.match(/^<\s*([a-z]+)((?:\s+[a-z][a-z0-9-]*\s*=\s*"[^"<>]*")*)\s*\/?\s*>$/i);
     const close = tag.match(/^<\/\s*([a-z]+)\s*>$/i);
     const name = (open?.[1] ?? close?.[1])?.toLowerCase();
     if (!name || !ELEMENTS.has(name)) return { error: `The drawing uses something other than plain shapes: ${tag.slice(0, 40)}` };
-    for (const [, attribute] of (open?.[2] ?? "").matchAll(/([a-z-]+)\s*=/gi)) {
+    for (const [, attribute] of (open?.[2] ?? "").matchAll(/([a-z][a-z0-9-]*)\s*=\s*"/gi)) {
       if (!ATTRIBUTES.has(attribute.toLowerCase())) return { error: `The drawing uses an attribute that isn't allowed: ${attribute}` };
     }
   }

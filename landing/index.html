@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Poppy finds your toddler one thing to do. A WhatsApp chat that shows how she behaves.">
+<meta name="description" content="Poppy finds your toddler one thing to do. Try her in a WhatsApp chat right here.">
 <title>Poppy Landing Page</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap">
 <style>
@@ -33,7 +33,7 @@
     color-scheme: dark;
   }
 
-  html, body { margin: 0; }
+  html, body { margin: 0; overflow-anchor: none; }
   .track { min-height: 100vh; min-height: 100dvh; }
   body { background: var(--page); color: var(--chat-ink); font-family: var(--body); font-size: 16px; line-height: 1.42; }
   /* The phone: pinned to the screen while the page scrolls behind it. On a real phone it keeps a thin bezel so the chat isn't squeezed. */
@@ -123,6 +123,35 @@
   @keyframes nudge { 0%, 100% { translate: 0 -2px; } 50% { translate: 0 3px; } }
   @media (prefers-reduced-motion: reduce) { .hint i { animation: none; } }
   .note { font-size: 12px; color: var(--chat-soft); }
+  .acts { display: flex; align-items: center; gap: 8px; }
+  .acts .chips { flex: 1; min-width: 0; }
+  .chip.try { flex: none; background: var(--sun); color: var(--sun-ink); border-color: var(--sun); font-weight: 700; font-size: 14px; padding: 8px 13px; }
+  .chip.go { font-size: 15px; padding: 9px 14px; }
+  .pitch .chip { margin-top: 24px; font-size: 18px; padding: 12px 22px; background: var(--sun); color: var(--sun-ink); border-color: var(--sun); font-weight: 700; }
+
+  /* The live chat: the same phone, with a real message box. The story's log and bar are swapped for these while it's open. */
+  .app.live #log, .app.live .bar, .app.live .head .narrow, .app.live .head .wide { display: none; }
+  .app:not(.live) #live, .app:not(.live) .compose, .app:not(.live) .back, .app:not(.live) .head .inlive { display: none; }
+  .track.live { height: 100vh !important; height: 100dvh !important; }
+  .head > div { min-width: 0; }
+  .back { margin-left: auto; flex: none; font: inherit; font-size: 12px; font-weight: 700; color: var(--poppy-ink); background: rgba(0, 0, 0, 0.2); border: 0; border-radius: 999px; padding: 7px 11px; cursor: pointer; white-space: nowrap; }
+  #live { overflow-y: auto; justify-content: flex-start; overscroll-behavior: contain; scrollbar-width: thin; }
+  #live > :first-child { margin-top: auto; }
+  .sys { align-self: center; text-align: center; background: var(--them); color: var(--chat-soft); font-size: 12.5px; padding: 5px 12px; border-radius: 8px; max-width: 88%; }
+  .card img.pic { aspect-ratio: 600 / 340; object-fit: cover; background: #E6F1FB; }
+  .compose { background: var(--bar); border-top: 1px solid var(--bar-line); padding-block: 8px 6px; padding-left: max(10px, env(safe-area-inset-left, 0px)); padding-right: max(10px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 8px; flex: none; }
+  .starters { display: flex; flex-direction: column; gap: 6px; }
+  .starters[hidden] { display: none; }
+  .starter { font: inherit; font-size: 14px; line-height: 1.3; text-align: left; background: var(--chip); color: var(--chip-ink); border: 1.5px solid var(--chip-line); border-radius: 14px; padding: 8px 12px; cursor: pointer; }
+  .starter:hover { background: var(--sun); color: var(--sun-ink); border-color: var(--sun); }
+  .box { display: flex; align-items: center; gap: 8px; }
+  .box input { flex: 1; min-width: 0; box-sizing: border-box; font: inherit; font-size: 16px; color: var(--chat-ink); background: var(--chat-bg); border: 1px solid var(--bar-line); border-radius: 999px; padding: 10px 15px; }
+  .box input::placeholder { color: var(--chat-soft); opacity: 1; }
+  .box input:disabled { opacity: 0.6; }
+  .send { flex: none; width: 42px; height: 42px; border-radius: 50%; border: 0; background: var(--poppy); color: #fff; display: grid; place-items: center; cursor: pointer; }
+  .send svg { width: 20px; height: 20px; fill: currentColor; }
+  .send:disabled { opacity: 0.45; cursor: default; }
+  @media (max-width: 599px) { .stage.fit .phone { height: calc(var(--vvh) - 12px); } }
 </style>
 </head>
 <body>
@@ -132,6 +161,7 @@
 <div class="pitch">
   <h1>You need a minute. I've got <em>one idea</em>.</h1>
   <p>Poppy lives in WhatsApp. Tell her it's all kicking off and she sends one thing to do.</p>
+  <button type="button" class="chip" data-try>Try Poppy yourself</button>
 </div>
 <div class="phone">
 <div class="cam" aria-hidden="true"></div>
@@ -147,16 +177,28 @@
     <svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="17" fill="#2b1230"/><g fill="#ffd23f"><circle cx="17" cy="10.5" r="5"/><circle cx="23.5" cy="17" r="5"/><circle cx="17" cy="23.5" r="5"/><circle cx="10.5" cy="17" r="5"/></g><circle cx="17" cy="17" r="3.6" fill="#e8402a"/></svg>
     <div>
       <div class="name">Poppy</div>
-      <div class="status"><span class="narrow">You need a minute. I've got <em>one idea</em>.</span><span class="wide">online, and not judging</span></div>
+      <div class="status"><span class="narrow">You need a minute. I've got <em>one idea</em>.</span><span class="wide">online, and not judging</span><span class="inlive">online, not judging</span></div>
     </div>
+    <button type="button" class="back" id="back">Back to the story</button>
   </div>
 
   <div class="log" id="log"></div>
+  <div class="log" id="live" role="log" aria-live="polite" aria-label="Your chat with Poppy"></div>
 
   <div class="bar">
-    <div class="chips" id="chips"><span class="hint"><i></i>Scroll to see how it went</span></div>
+    <div class="acts">
+      <div class="chips" id="chips"><span class="hint"><i></i>Scroll to see how it went</span></div>
+      <button type="button" class="chip try" data-try aria-label="Try Poppy yourself">Try Poppy</button>
+    </div>
     <div class="note">Poppy's real messages. A made up family.</div>
   </div>
+  <form class="compose" id="compose" autocomplete="off">
+    <div class="starters" id="starters"></div>
+    <div class="box">
+      <input id="say" type="text" maxlength="500" enterkeyhint="send" autocomplete="off" placeholder="Message Poppy" aria-label="Message Poppy">
+      <button class="send" id="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10.2 15 12 3.4 13.8Z"/></svg></button>
+    </div>
+  </form>
   <div class="home" aria-hidden="true"><i></i></div>
 </div>
 </div>
@@ -254,6 +296,35 @@ poppy: Send */forget* and I delete everything I know about you. My WhatsApp numb
 <script>
 (function () {
   var STEP = 150; // pixels of scrolling per message
+
+  // ---- THE LIVE CHAT ("Try Poppy"). Everything you might want to change about it is here. ----
+  var API_PATH = '/poppy/api/web';              // where a visitor's message is sent
+  var LIVE_HOSTS = ['build40for40.com', 'www.build40for40.com', 'localhost', '127.0.0.1']; // anywhere else, or with ?mock=1, the replies are canned
+  var VISITOR_ID_KEY = 'poppy-demo-visitor';    // where this browser's random id is kept
+  var REPLY_TIMEOUT_MS = 40000;
+  var WATCH_URL = 'https://www.twitch.tv/40for40';
+  var STARTERS = [
+    "My 3 year old loves dinosaurs. We're at home and I need 20 minutes.",
+    "She's 2, we're in the kitchen and I need to get dinner on.",
+    "He's 4 and car mad. We're in the garden. Help."
+  ];
+  var LINES = {
+    demo: 'This is a demo chat. Poppy forgets it within a day.',
+    canned: 'Preview only: these replies are canned.',
+    closed: "That's the end of the demo, I'm afraid. The real me lives on WhatsApp and my number opens soon. Until then, come and watch me being built.",
+    daily: "I'm having a lie down. The demo has had a very busy day. Come back tomorrow?",
+    oops: "Poppy didn't catch that. Have another go."
+  };
+  // Canned mode: how many messages a visitor gets, the message that fails on purpose, and the replies, in order. A picture is the id of one in the pictures block.
+  var CANNED_LEFT = 4;
+  var CANNED_FAIL_WORD = 'fail';
+  var CANNED_REPLIES = [
+    { picture: 'painting', text: "*Rainbow road*\n2 min to set up · keeps them busy for about 20 min\n\n*Grab:* a big sheet of paper, washable paints, a chunky brush\n*Then:* tape the paper to the table and ask for the longest rainbow road anyone has ever painted.\n\nBig arm movements build the shoulder strength writing needs later, and a road never has to be finished. Old T-shirt on first.\n\nTell me how it goes, or ask for something different." },
+    { picture: null, text: "Noted. I'll remember that for next time. How long did it keep them busy?" },
+    { picture: null, text: "*Recent play*\n• Today: Rainbow road, no word yet\n\nJust the one so far. Want to repeat it, or try something new?" },
+    { picture: null, text: "Got it. That's saved for next time." }
+  ];
+
   var track = document.getElementById('track');
   var log = document.getElementById('log');
   var chips = document.getElementById('chips');
@@ -346,16 +417,17 @@ poppy: Send */forget* and I delete everything I know about you. My WhatsApp numb
     }, 500);
   }
 
-  var hint = chips.innerHTML, shown = -1, ended = null;
+  var hint = chips.innerHTML, shown = -1, ended = null, liveOn = false;
   function end(on) {
     if (on === ended) return; ended = on;
     if (!on) { chips.innerHTML = hint; return; }
     chips.innerHTML = '';
     var a = document.createElement('a');
-    a.className = 'chip go'; a.href = 'https://www.twitch.tv/40for40'; a.textContent = 'Watch Poppy being built';
+    a.className = 'chip go'; a.href = WATCH_URL; a.textContent = 'Watch Poppy being built';
     chips.appendChild(a);
   }
   function update() {
+    if (liveOn) return;
     var y = Math.max(0, window.scrollY - track.offsetTop);
     var n = Math.min(rows.length, show + Math.floor((y + STEP * 0.25) / STEP));
     if (ready < show) {
@@ -376,6 +448,198 @@ poppy: Send */forget* and I delete everything I know about you. My WhatsApp numb
   if (!reduce && show > 1) ready = 1;
   update();
   setTimeout(function () { log.classList.remove('still'); next(); }, 80);
+
+  // ---- The live chat ----
+  var MOCK = /[?&]mock=1(&|$)/.test(location.search) || LIVE_HOSTS.indexOf(location.hostname) === -1;
+  var app = document.querySelector('.app'), stage = document.querySelector('.stage');
+  var live = document.getElementById('live'), form = document.getElementById('compose');
+  var say = document.getElementById('say'), sendBtn = document.getElementById('send'), starters = document.getElementById('starters');
+  var started = false, waiting = false, closed = false, storyY = 0, liveLast = '', cannedLeft = CANNED_LEFT, cannedAt = 0, memoryId = '';
+  var liveTyping = typing.cloneNode(true);
+
+  function ukTime() {
+    try { return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/London' }).format(new Date()); }
+    catch (e) { var d = new Date(); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+  }
+  function visitorId() {
+    var id = '';
+    try { id = localStorage.getItem(VISITOR_ID_KEY) || ''; } catch (e) {}
+    if (!id) id = memoryId;
+    if (!id) {
+      if (window.crypto && crypto.randomUUID) id = crypto.randomUUID();
+      else id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        var r = window.crypto && crypto.getRandomValues ? crypto.getRandomValues(new Uint8Array(1))[0] & 15 : Math.random() * 16 | 0;
+        return (c === 'x' ? r : (r & 3) | 8).toString(16);
+      });
+      memoryId = id;
+      try { localStorage.setItem(VISITOR_ID_KEY, id); } catch (e) {}
+    }
+    return id;
+  }
+  function toBottom() { live.scrollTop = live.scrollHeight; }
+  function liveRow(who, el) {
+    var row = document.createElement('div');
+    row.className = 'row on' + (liveLast && liveLast !== who ? ' turn' : '');
+    liveLast = who;
+    var inner = document.createElement('div'); inner.className = 'in';
+    inner.appendChild(el); row.appendChild(inner);
+    if (liveTyping.parentNode === live) live.insertBefore(row, liveTyping); else live.appendChild(row);
+    toBottom();
+    return row;
+  }
+  function liveNote(cls, text) { var el = document.createElement('div'); el.className = cls; el.textContent = text; return liveRow('day', el); }
+  // Poppy writes WhatsApp text: line breaks, and *single stars* for bold. Everything else is shown exactly as text.
+  function whatsapp(text) {
+    var box = document.createElement('div');
+    String(text).trim().split(/\n\s*\n/).forEach(function (part) {
+      var p = document.createElement('div'); p.className = 'p';
+      p.innerHTML = esc(part).replace(/\*([^*\n]+)\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+      box.appendChild(p);
+    });
+    return box;
+  }
+  function liveMsg(who, body, picture) {
+    var el = document.createElement('div');
+    el.className = 'msg ' + who;
+    if (picture) {
+      el.className += ' card';
+      var img = document.createElement('img');
+      img.className = 'pic'; img.alt = 'A picture of the activity'; img.onload = toBottom;
+      img.onerror = function () { if (img.parentNode) img.parentNode.removeChild(img); el.classList.remove('card'); body.className = ''; };
+      img.src = picture;
+      el.appendChild(img);
+      body.className = 'cap';
+    }
+    el.appendChild(body);
+    var meta = document.createElement('span'); meta.className = 'meta';
+    meta.textContent = ukTime();
+    if (who === 'me') { var ticks = document.createElement('b'); ticks.textContent = ' ✓✓'; meta.appendChild(ticks); }
+    el.appendChild(meta);
+    now.textContent = ukTime();
+    return liveRow(who, el);
+  }
+  function showTyping(on) {
+    if (on) { liveTyping.className = 'row on' + (liveLast !== 'them' ? ' turn' : ''); live.appendChild(liveTyping); toBottom(); }
+    else if (liveTyping.parentNode) liveTyping.parentNode.removeChild(liveTyping);
+  }
+  // Only Poppy's own pictures: an https address from the server, or one from the pictures block in canned mode.
+  function pictureUrl(picture) {
+    if (typeof picture !== 'string' || !picture) return '';
+    if (MOCK) {
+      var svg = pictures.querySelector('[data-picture="' + picture.replace(/[^a-z0-9-]/gi, '') + '"]');
+      if (!svg) return '';
+      svg = svg.cloneNode(true); svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      return 'data:image/svg+xml,' + encodeURIComponent(svg.outerHTML);
+    }
+    return /^https:\/\//i.test(picture) || (/^http:\/\/(localhost|127\.0\.0\.1)[:\/]/i.test(picture) && LIVE_HOSTS.indexOf(location.hostname) > 1) ? picture : '';
+  }
+
+  // Asking Poppy. Both ways answer with {status, body}, or fail outright when nothing comes back.
+  function askServer(text) {
+    var stop = window.AbortController ? new AbortController() : null;
+    var clock = setTimeout(function () { if (stop) stop.abort(); }, REPLY_TIMEOUT_MS);
+    return fetch(API_PATH, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: visitorId(), text: text }), signal: stop ? stop.signal : undefined })
+      .then(function (res) { return res.json().catch(function () { return null; }).then(function (body) { clearTimeout(clock); return { status: res.status, body: body }; }); },
+            function (err) { clearTimeout(clock); throw err; });
+  }
+  function askCanned(text) {
+    return new Promise(function (resolve) {
+      setTimeout(function () {
+        if (text.toLowerCase() === CANNED_FAIL_WORD) return resolve({ status: 500, body: { error: 'canned_failure' } });
+        if (cannedLeft <= 0) return resolve({ status: 429, body: { error: 'visitor_limit' } });
+        var reply = CANNED_REPLIES[cannedAt++ % CANNED_REPLIES.length];
+        cannedLeft--;
+        resolve({ status: 200, body: { replies: [{ text: reply.text, picture: reply.picture }], left: cannedLeft } });
+      }, 1100);
+    });
+  }
+
+  function busy(on) { waiting = on; sendBtn.disabled = on || closed; }
+  function shut(line, withLink) {
+    closed = true; say.disabled = true; sendBtn.disabled = true; starters.hidden = true;
+    say.value = ''; say.placeholder = withLink ? "That's the demo done" : 'Back tomorrow';
+    var body = whatsapp(line);
+    if (withLink) {
+      var p = document.createElement('div'); p.className = 'p';
+      var a = document.createElement('a'); a.href = WATCH_URL; a.textContent = 'Watch Poppy being built';
+      p.appendChild(a); body.appendChild(p);
+    }
+    liveMsg('them', body);
+  }
+  function oops(row, text) {
+    if (row.parentNode) row.parentNode.removeChild(row);
+    liveLast = '';
+    liveNote('sys', LINES.oops);
+    if (!say.value) say.value = text;
+  }
+  function send(text) {
+    text = String(text).trim().slice(0, 500);
+    if (!text || waiting || closed) return;
+    say.value = ''; starters.hidden = true;
+    var mine = document.createElement('div'); mine.textContent = text;
+    var row = liveMsg('me', mine);
+    busy(true);
+    var typingClock = setTimeout(function () { showTyping(true); }, 350);
+    (MOCK ? askCanned(text) : askServer(text)).then(function (res) {
+      clearTimeout(typingClock); showTyping(false);
+      var body = res.body || {};
+      if (res.status === 200 && Array.isArray(body.replies)) {
+        body.replies.forEach(function (reply) {
+          if (reply && typeof reply.text === 'string' && reply.text.trim()) liveMsg('them', whatsapp(reply.text), pictureUrl(reply.picture));
+        });
+        if (body.left === 0) shut(LINES.closed, true);
+      } else if (res.status === 429 && body.error === 'visitor_limit') shut(LINES.closed, true);
+      else if (res.status === 429 && body.error === 'daily_limit') shut(LINES.daily, false);
+      else oops(row, text);
+    }, function () {
+      clearTimeout(typingClock); showTyping(false);
+      oops(row, text);
+    }).then(function () { busy(false); toBottom(); });
+  }
+
+  // On a phone the keyboard covers the bottom of the screen, so the phone frame is fitted to what's left above it.
+  var vv = window.visualViewport;
+  function fit() {
+    if (!liveOn) return;
+    if (vv) { stage.style.setProperty('--vvh', vv.height + 'px'); stage.style.height = vv.height + 'px'; stage.classList.add('fit'); }
+    window.scrollTo(0, 0);
+    toBottom();
+  }
+  function openLive() {
+    if (liveOn) return;
+    storyY = window.scrollY;
+    clearTimeout(timer); stopTyping(); ready = show; shown = -1; update(); // the story's opening finishes quietly behind the chat
+    liveOn = true;
+    app.classList.add('live'); track.classList.add('live');
+    if (!started) {
+      started = true;
+      liveNote('day', 'Today');
+      liveNote('sys', MOCK ? LINES.canned : LINES.demo);
+      STARTERS.forEach(function (text) {
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'starter'; b.textContent = text;
+        b.addEventListener('click', function () { send(text); });
+        starters.appendChild(b);
+      });
+    }
+    now.textContent = ukTime();
+    fit();
+    if (window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches) say.focus();
+  }
+  function closeLive() {
+    if (!liveOn) return;
+    liveOn = false;
+    app.classList.remove('live'); track.classList.remove('live');
+    stage.classList.remove('fit'); stage.style.height = ''; stage.style.removeProperty('--vvh');
+    say.blur();
+    var back = function () { window.scrollTo(0, storyY); shown = -1; update(); };
+    back(); setTimeout(back, 0); // again once the page is tall again, so the story is where they left it
+  }
+  [].forEach.call(document.querySelectorAll('[data-try]'), function (b) { b.addEventListener('click', openLive); });
+  document.getElementById('back').addEventListener('click', closeLive);
+  form.addEventListener('submit', function (e) { e.preventDefault(); send(say.value); });
+  if (vv) { vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit); }
+  window.addEventListener('resize', fit);
 })();
 </script>
 </body>

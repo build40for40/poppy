@@ -1,13 +1,16 @@
 import { BASE_PATH, error, HttpError, isPlainObject, json, readText } from "./http";
 import { PICTURE_ID, renderPng, starterPicture, type Picture } from "./pictures";
 import { shelfOf } from "./shelf";
-import { emptyTwiml, incomingTwilioMessage, signedUrlCandidates, twilioSenders, verifyTwilioSignature } from "./twilio";
+import landingPage from "../../../landing/index.html";
+import { gateOf, WEB_DAILY_MAX, WEB_MAX_CHARS, WEB_MAX_MESSAGES } from "./gate";
+import { emptyTwiml, incomingTwilioMessage, signedUrlCandidates, twilioPieces, twilioSenders, twimlReply, verifyTwilioSignature } from "./twilio";
 import { brainName, incomingMessages, safeEqual, verifySignature, type Address, type Incoming } from "./whatsapp";
 
 import type { UserBrain } from "./brain";
 
 export { UserBrain } from "./brain";
 export { PictureShelf } from "./shelf";
+export { WebGate } from "./gate";
 
 /** Meta batches up to 1,000 updates into one POST. */
 const MAX_WEBHOOK_BYTES = 3 * 1024 * 1024;
@@ -18,24 +21,48 @@ const TWILIO_PATH = `${BASE_PATH}/twilio`;
 const DEV_PATH = `${BASE_PATH}/dev`;
 const MAX_DEV_BYTES = 4 * 1024;
 const PICTURES_PATH = `${BASE_PATH}/pictures/`;
+/** Twilio gives a webhook 15 seconds. A reply that's ready inside this goes back in the webhook's answer. */
+const TWILIO_INLINE_WAIT_MS = 12_000;
+/** How much longer the Worker waits for the brain to hand the reply over before answering with nothing. */
+const TWILIO_INLINE_GRACE_MS = 1_500;
+
+// The landing page and its demo chat. The page is public and unsigned, so the chat is capped per visitor and per day.
+const LANDING_PATH = BASE_PATH.replace(/\/api$/, "");
+const WEB_PATH = `${BASE_PATH}/web`;
+const MAX_WEB_BYTES = 4 * 1024;
+const WEB_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const WEB_WAIT_MS = 30_000;
 
 // The generated stub types recurse too deeply on JSON, so the stub is typed from the class directly.
 type Rpc<T> = { [K in keyof T]: T[K] extends (...args: infer A) => infer R ? (...args: A) => Promise<Awaited<R>> : never };
-type Brain = Rpc<Pick<UserBrain, "receive" | "devMemory" | "devEnd" | "devAdvance">>;
+type Brain = Rpc<Pick<UserBrain, "receive" | "answerNow" | "webAllowance" | "answerWeb" | "devMemory" | "devEnd" | "devAdvance">>;
 
 export default {
-  async fetch(request, env): Promise<Response> {
+  async fetch(request, env, ctx): Promise<Response> {
     const { pathname, searchParams } = new URL(request.url);
     if (pathname.startsWith(PICTURES_PATH)) {
       if (request.method !== "GET" && request.method !== "HEAD") return error(405, "method_not_allowed", undefined, { Allow: "GET, HEAD" });
       return picture(request, pathname.slice(PICTURES_PATH.length), env);
+    }
+    if (pathname === LANDING_PATH || pathname === `${LANDING_PATH}/`) {
+      if (request.method !== "GET" && request.method !== "HEAD") return error(405, "method_not_allowed", undefined, { Allow: "GET, HEAD" });
+      return new Response(request.method === "HEAD" ? null : landingPage, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300" } });
+    }
+    if (pathname === WEB_PATH && env.WEB_CHAT?.trim().toLowerCase() === "true") {
+      if (request.method !== "POST") return error(405, "method_not_allowed", undefined, { Allow: "POST" });
+      try {
+        return await webChat(request, env);
+      } catch (e) {
+        if (e instanceof HttpError) return e.toResponse();
+        throw e;
+      }
     }
     const dev = pathname === DEV_PATH && env.DEV_TOOLS?.trim().toLowerCase() === "true";
     if (!dev && pathname !== WEBHOOK_PATH && pathname !== TWILIO_PATH) return error(404, "not_found");
     try {
       if (dev) return await devTools(request, env);
       if (pathname === TWILIO_PATH) {
-        if (request.method === "POST") return await twilioWebhook(request, env);
+        if (request.method === "POST") return await twilioWebhook(request, env, ctx);
         return error(405, "method_not_allowed", undefined, { Allow: "POST" });
       }
       if (request.method === "GET") return handshake(searchParams, env);
@@ -81,8 +108,12 @@ async function webhook(request: Request, env: Env): Promise<Response> {
  * The fallback way in: Twilio's WhatsApp sandbox. Same shape as Meta's webhook: check the signature against the raw form body
  * before using any of it, hand the message to its sender's Durable Object, and answer with empty TwiML. The reply is sent
  * from the object's alarm through Twilio's API.
+ *
+ * With `TWILIO_REPLY_INLINE` set to "true" the reply goes back in this answer instead, as TwiML, for a Twilio account that
+ * isn't allowed to send through the API yet. The brain answers while Twilio waits, and a reply that isn't ready in time
+ * still goes through the API.
  */
-async function twilioWebhook(request: Request, env: Env): Promise<Response> {
+async function twilioWebhook(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   if (!env.TWILIO_AUTH_TOKEN) return error(503, "twilio_unavailable");
   const raw = await readText(request, MAX_TWILIO_BYTES);
   const params = new URLSearchParams(raw);
@@ -94,8 +125,44 @@ async function twilioWebhook(request: Request, env: Env): Promise<Response> {
   if (!verified) return error(401, "bad_signature");
 
   const message = incomingTwilioMessage(params, { accountSid: env.TWILIO_ACCOUNT_SID, senders: twilioSenders(env.TWILIO_WHATSAPP_FROM) });
-  if (message) await deliver(message, env);
-  return emptyTwiml();
+  if (!message) return emptyTwiml();
+  if (env.TWILIO_REPLY_INLINE?.trim().toLowerCase() !== "true") {
+    await deliver(message, env);
+    return emptyTwiml();
+  }
+
+  const answering = (await brainFor(message, env)).answerNow(message, TWILIO_INLINE_WAIT_MS);
+  // The brain carries on if this gives up waiting, so the turn is still saved.
+  ctx.waitUntil(answering.catch(() => {}));
+  const gaveUp = new Promise<null>((resolve) => setTimeout(() => resolve(null), TWILIO_INLINE_WAIT_MS + TWILIO_INLINE_GRACE_MS));
+  const replies = await Promise.race([answering, gaveUp]);
+  if (!replies) console.warn(JSON.stringify({ event: "twilio_inline_gave_up" }));
+  return twimlReply((replies ?? []).flatMap((reply) => twilioPieces(reply.text, reply.picture ?? undefined)));
+}
+
+/**
+ * The demo chat on the landing page: one message in, Poppy's reply out. Nobody signs these, so every visitor is a throwaway
+ * brain of their own, named by a random id their browser made, with a few messages to spend and a day to live, and there's
+ * a ceiling on how many messages the whole page takes in a day.
+ */
+async function webChat(request: Request, env: Env): Promise<Response> {
+  let body: unknown;
+  try {
+    body = JSON.parse(await readText(request, MAX_WEB_BYTES));
+  } catch {
+    return error(400, "invalid_json");
+  }
+  if (!isPlainObject(body) || typeof body.id !== "string" || !WEB_ID.test(body.id)) return error(400, "invalid_id");
+  const text = typeof body.text === "string" ? body.text.trim() : "";
+  if (!text || text.length > WEB_MAX_CHARS) return error(400, "invalid_text");
+
+  const address: Address = { phone: null, userId: body.id, provider: "web" };
+  const brain = await brainFor(address, env);
+  if ((await brain.webAllowance(WEB_MAX_MESSAGES)) <= 0) return error(429, "visitor_limit");
+  if (!(await gateOf(env).take(new Date().toISOString().slice(0, 10), WEB_DAILY_MAX))) return error(429, "daily_limit");
+
+  const message: Incoming = { ...address, id: `web-${crypto.randomUUID()}`, kind: "text", text };
+  return json(await brain.answerWeb(message, WEB_WAIT_MS, WEB_MAX_MESSAGES));
 }
 
 /**

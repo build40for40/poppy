@@ -48,6 +48,8 @@ describe("the starter set", () => {
 describe("checkBody", () => {
   it("lets plain shapes through", () => {
     expect(checkBody(' <g transform="rotate(10 50 50)"><circle cx="50" cy="50" r="20" fill="#378ADD"/></g> ')).toEqual({ body: '<g transform="rotate(10 50 50)"><circle cx="50" cy="50" r="20" fill="#378ADD"/></g>' });
+    const line = '<line x1="200" y1="156" x2="300" y2="156" stroke="#378ADD" stroke-width="4"/>';
+    expect(checkBody(line)).toEqual({ body: line });
   });
 
   it("refuses text, scripts, links, images, styles, references and anything outside a tag", () => {
