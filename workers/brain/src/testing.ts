@@ -1,6 +1,7 @@
 import { env, exports } from "cloudflare:workers";
 import { vi } from "vitest";
 import { BASE_PATH } from "./http";
+import { signTwilio, twilioMessagesUrl } from "./twilio";
 import { brainName, sign, type Address } from "./whatsapp";
 
 export type ClaudeBlock = { type: "text"; text: string } | { type: "tool_use"; id?: string; name: string; input: unknown };
@@ -24,19 +25,29 @@ export interface GraphMock {
   status: number;
 }
 
+export interface TwilioMock {
+  /** The form fields sent to Twilio's Messages endpoint, in order. */
+  requests: Record<string, string>[];
+  /** The status to answer with. Anything but 201 comes with a Twilio-style error body. */
+  status: number;
+}
+
 const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
 let claudeMock: ClaudeMock | null = null;
 let graphMock: GraphMock | null = null;
+let twilioMock: TwilioMock | null = null;
 let toolUseCount = 0;
 
 function installFetchMock(): void {
   if (vi.isMockFunction(globalThis.fetch)) return;
   claudeMock = null;
   graphMock = null;
+  twilioMock = null;
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const request = new Request(input, init);
     if (request.url.startsWith(ANTHROPIC_MESSAGES_URL) && claudeMock) return claudeResponse(claudeMock, request);
     if (request.url === graphUrl() && graphMock) return graphResponse(graphMock, request);
+    if (request.url === twilioMessagesUrl(env.TWILIO_ACCOUNT_SID) && twilioMock) return twilioResponse(twilioMock, request);
     throw new Error(`Unexpected fetch: ${request.method} ${request.url}`);
   });
 }
@@ -53,6 +64,20 @@ export function mockGraph(): GraphMock {
   installFetchMock();
   graphMock = { requests: [], status: 200 };
   return graphMock;
+}
+
+/** Stands in for Twilio's Messages endpoint and records what was sent. */
+export function mockTwilio(): TwilioMock {
+  installFetchMock();
+  twilioMock = { requests: [], status: 201 };
+  return twilioMock;
+}
+
+async function twilioResponse(mock: TwilioMock, request: Request): Promise<Response> {
+  if (request.headers.get("Authorization") !== `Basic ${btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`)}`) return Response.json({ code: 20003, message: "Authenticate" }, { status: 401 });
+  mock.requests.push(Object.fromEntries(new URLSearchParams(await request.text())));
+  if (mock.status !== 201) return Response.json({ code: 63015, message: "fake failure" }, { status: mock.status });
+  return Response.json({ sid: "SMfake", status: "queued" }, { status: 201 });
 }
 
 export const graphUrl = () => `https://graph.facebook.com/${env.WHATSAPP_API_VERSION}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
@@ -188,3 +213,52 @@ export async function postWebhook(payload: unknown, { signature }: { signature?:
 export const sayAs = (from: Address, body: string, id?: string) => postWebhook(fakeWebhook({ messages: [fakeMessage({ from, body, id })] }));
 
 export const brainFor = async (address: Address) => env.USER_BRAIN.get(env.USER_BRAIN.idFromName(await brainName(address)));
+
+// Twilio
+
+let twilioMessageCount = 0;
+
+/** A fake Twilio message id: two letters and 32 hex digits. */
+export const fakeSid = () => `SM${String(++twilioMessageCount).padStart(32, "0")}`;
+
+/** A new fake person who arrives through Twilio, with their own Durable Object. */
+export function fakeTwilioPerson(): Address {
+  return { phone: fakePerson().phone, userId: null, provider: "twilio" };
+}
+
+/** The form fields of one incoming WhatsApp message as Twilio posts them. Extra fields override or add to the defaults. */
+export function fakeTwilioParams(from: Address, body: string, extra: Record<string, string> = {}): Record<string, string> {
+  return {
+    SmsMessageSid: "SMfake",
+    NumMedia: "0",
+    ProfileName: "Fake Person",
+    MessageType: "text",
+    SmsSid: "SMfake",
+    WaId: from.phone!,
+    SmsStatus: "received",
+    Body: body,
+    To: env.TWILIO_WHATSAPP_FROM,
+    NumSegments: "1",
+    ReferralNumMedia: "0",
+    MessageSid: fakeSid(),
+    AccountSid: env.TWILIO_ACCOUNT_SID,
+    From: `whatsapp:+${from.phone}`,
+    ApiVersion: "2010-04-01",
+    ...extra,
+  };
+}
+
+export const TWILIO_WEBHOOK_URL = `https://build40for40.com${BASE_PATH}/twilio`;
+
+/** POSTs form fields to the Twilio webhook the way Twilio does, signed with the auth token unless told otherwise. */
+export async function postTwilio(params: Record<string, string>, { signature, signedUrl = TWILIO_WEBHOOK_URL }: { signature?: string | null; signedUrl?: string } = {}): Promise<Response> {
+  const header = signature === undefined ? await signTwilio(signedUrl, Object.entries(params), env.TWILIO_AUTH_TOKEN) : signature;
+  return exports.default.fetch(TWILIO_WEBHOOK_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", ...(header === null ? {} : { "X-Twilio-Signature": header }) },
+    body: new URLSearchParams(params).toString(),
+  });
+}
+
+/** Sends one text message from a fake person through the Twilio webhook. */
+export const sayOnTwilio = (from: Address, body: string, extra?: Record<string, string>) => postTwilio(fakeTwilioParams(from, body, extra));

@@ -1,6 +1,6 @@
 name: Brain deploy
 
-# Manual only until the Meta app and its secrets exist. Once they do, add a push trigger on main for workers/brain/**.
+# Manual only until a provider's secrets exist (Meta's, or Twilio's as the fallback). Once they do, add a push trigger on main for workers/brain/**.
 on:
   workflow_dispatch:
 
@@ -26,6 +26,9 @@ jobs:
       WHATSAPP_TOKEN: ${{ secrets.WHATSAPP_TOKEN }}
       WHATSAPP_VERIFY_TOKEN: ${{ secrets.WHATSAPP_VERIFY_TOKEN }}
       WHATSAPP_PHONE_NUMBER_ID: ${{ secrets.WHATSAPP_PHONE_NUMBER_ID }}
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+      TWILIO_WHATSAPP_FROM: ${{ secrets.TWILIO_WHATSAPP_FROM }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -51,6 +54,9 @@ jobs:
             [ -n "$WHATSAPP_TOKEN" ] && echo WHATSAPP_TOKEN
             [ -n "$WHATSAPP_VERIFY_TOKEN" ] && echo WHATSAPP_VERIFY_TOKEN
             [ -n "$WHATSAPP_PHONE_NUMBER_ID" ] && echo WHATSAPP_PHONE_NUMBER_ID
+            [ -n "$TWILIO_ACCOUNT_SID" ] && echo TWILIO_ACCOUNT_SID
+            [ -n "$TWILIO_AUTH_TOKEN" ] && echo TWILIO_AUTH_TOKEN
+            [ -n "$TWILIO_WHATSAPP_FROM" ] && echo TWILIO_WHATSAPP_FROM
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 

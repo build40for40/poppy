@@ -9,8 +9,9 @@ import { migrate } from "./schema";
 import { starterAbout, starterPreferences } from "./seed";
 import { appendUserText, runTurn } from "./turn";
 import type { Turn } from "./types";
+import { sendTwilioText, TWILIO_SEND_GAP_MS } from "./twilio";
 import { INTERESTS_MD, londonDate, londonDay, londonTime, nextLondonMidnight, readFile, splitLearned, writeFile, writeReflection } from "./vault";
-import { markReadAndTyping, sendText, WhatsAppError, type Address, type Incoming, type WhatsAppConfig } from "./whatsapp";
+import { markReadAndTyping, sendText, WhatsAppError, type Address, type Incoming, type Provider } from "./whatsapp";
 
 /** A chat has no "end" button, so a session ends when the person has been quiet this long. A play session outlives it: see plays.ts. */
 export const IDLE_MINUTES = 30;
@@ -32,6 +33,13 @@ export const REPLIES = {
   unavailable: "Sorry, I can't reply right now. Try again in a bit.",
   nudge: (activity: string) => `How did "${activity}" go? Tell me how long it lasted and what they made of it, and I'll remember for next time.`,
 };
+
+/** How replies get back to a person: the provider their messages arrive through. */
+interface Channel {
+  send(to: Address, text: string): Promise<void>;
+  /** Marks a message read and shows typing, where the provider can. */
+  markRead(messageId: string): Promise<void>;
+}
 
 export type EndReason = "idle" | "turn_cap" | "midnight";
 export type ReflectionStatus = "not_ended" | "pending" | "done" | "failed";
@@ -176,9 +184,9 @@ export class UserBrain extends DurableObject<Env> {
   private async answerInbox(): Promise<void> {
     for (let rows = this.unhandled(); rows.length; rows = this.unhandled()) {
       const address = this.address();
-      const whatsapp = this.whatsapp();
+      const whatsapp = address && this.channel(address.provider ?? "meta");
       if (!address || !whatsapp) {
-        console.warn(JSON.stringify({ event: "brain_reply_skipped", reason: whatsapp ? "no_address" : "whatsapp_not_configured", messages: rows.length }));
+        console.warn(JSON.stringify({ event: "brain_reply_skipped", reason: address ? "provider_not_configured" : "no_address", provider: address?.provider, messages: rows.length }));
         this.markHandled(rows);
         continue;
       }
@@ -200,7 +208,7 @@ export class UserBrain extends DurableObject<Env> {
         continue;
       }
 
-      await markReadAndTyping(whatsapp, rows.at(-1)!.message_id).catch((e) => this.logSendFailure("whatsapp_read_failed", e));
+      await whatsapp.markRead(rows.at(-1)!.message_id).catch((e) => this.logSendFailure("whatsapp_read_failed", e));
       const reply = this.env.ECHO_MODE?.trim().toLowerCase() === "true" ? text : await this.takeTurn(text);
       // Handled before the reply goes out: the turn is already saved, so a failed send mustn't run it twice.
       this.markHandled(rows);
@@ -250,7 +258,7 @@ export class UserBrain extends DurableObject<Env> {
   }
 
   /** Wipes the object, confirms, then puts back any messages that arrived after the command so they're answered by a fresh brain. */
-  private async forget(whatsapp: WhatsAppConfig, address: Address, later: InboxRow[]): Promise<void> {
+  private async forget(whatsapp: Channel, address: Address, later: InboxRow[]): Promise<void> {
     await this.wipe();
     console.log(JSON.stringify({ event: "brain_forgotten" }));
     await this.send(whatsapp, address, REPLIES.forgotten);
@@ -262,12 +270,12 @@ export class UserBrain extends DurableObject<Env> {
     }
   }
 
-  private async send(whatsapp: WhatsAppConfig, address: Address, text: string): Promise<void> {
-    await sendText(whatsapp, address, text).catch((e) => this.logSendFailure("whatsapp_send_failed", e));
+  private async send(whatsapp: Channel, address: Address, text: string): Promise<void> {
+    await whatsapp.send(address, text).catch((e) => this.logSendFailure("whatsapp_send_failed", e));
   }
 
   private logSendFailure(event: string, e: unknown): void {
-    // Only the status and Meta's error code: the error body can quote the recipient's number.
+    // Only the status and the provider's error code: the error body can quote the recipient's number.
     const detail = e instanceof WhatsAppError ? { status: e.status, code: e.code } : { error: "network" };
     console.error(JSON.stringify({ event, ...detail }));
   }
@@ -391,7 +399,7 @@ export class UserBrain extends DurableObject<Env> {
     const play = openPlay(this.sql);
     if (!play || play.nudgedAt || this.openSession() || now.getTime() < nudgeDue(play)) return;
     const address = this.address();
-    const whatsapp = this.whatsapp();
+    const whatsapp = address && this.channel(address.provider ?? "meta");
     if (!address || !whatsapp) return;
     // Marked before it goes out, so a send that fails isn't tried again and again.
     markNudged(this.sql, play.path, now.toISOString());
@@ -428,23 +436,40 @@ export class UserBrain extends DurableObject<Env> {
   }
 
   /** The object is named by a hash, so it keeps the number (or user id) it needs to reply to. It's never logged, and /forget deletes it. */
-  private saveAddress({ phone, userId }: Address): void {
+  private saveAddress({ phone, userId, provider }: Address): void {
     const save = (key: string, value: string | null) => {
       if (value) this.sql.exec("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value", key, value);
     };
     save("phone", phone);
     save("user_id", userId);
+    // Replies go back the way the person's latest message came in.
+    save("provider", provider ?? "meta");
   }
 
   private address(): Address | null {
     const get = (key: string) => this.sql.exec<{ value: string }>("SELECT value FROM settings WHERE key = ?", key).toArray()[0]?.value ?? null;
-    const address = { phone: get("phone"), userId: get("user_id") };
+    const address: Address = { phone: get("phone"), userId: get("user_id"), provider: get("provider") === "twilio" ? "twilio" : "meta" };
     return address.phone || address.userId ? address : null;
   }
 
-  private whatsapp(): WhatsAppConfig | null {
+  /** The send side of a provider, or null while its secrets aren't set. */
+  private channel(provider: Provider): Channel | null {
+    if (provider === "twilio") {
+      const { TWILIO_ACCOUNT_SID: accountSid, TWILIO_AUTH_TOKEN: authToken, TWILIO_WHATSAPP_FROM: from } = this.env;
+      if (!accountSid || !authToken || !from) return null;
+      const config = { accountSid, authToken, from, gapMs: TWILIO_SEND_GAP_MS };
+      return {
+        send: async (to, text) => {
+          if (to.phone) await sendTwilioText(config, to.phone, text);
+        },
+        // Twilio's sandbox has no read receipt or typing indicator to set.
+        markRead: async () => {},
+      };
+    }
     const { WHATSAPP_TOKEN: token, WHATSAPP_PHONE_NUMBER_ID: phoneNumberId, WHATSAPP_API_VERSION: apiVersion } = this.env;
-    return token && phoneNumberId && apiVersion ? { token, phoneNumberId, apiVersion } : null;
+    if (!token || !phoneNumberId || !apiVersion) return null;
+    const config = { token, phoneNumberId, apiVersion };
+    return { send: (to, text) => sendText(config, to, text), markRead: (messageId) => markReadAndTyping(config, messageId) };
   }
 
   private readUserMd(): Profile {
