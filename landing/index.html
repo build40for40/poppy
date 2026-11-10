@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Poppy gets you one hour back. A chat that shows how she behaves on WhatsApp.">
+<meta name="description" content="Poppy finds your toddler one thing to do. A WhatsApp chat that shows how she behaves.">
 <title>Poppy Landing Page</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap">
 <style>
-  /* Layout: the page is one chat with Poppy. No sections, no feature grid. The visitor plays the parent and Poppy behaves as it would on WhatsApp. */
+  /* Layout: the page is one chat between Poppy and a mum. The chat is pinned to the screen and the page behind it is tall. Scrolling down brings in the next message, scrolling up fades it away again. The conversation is the plain text block at the bottom. */
   :root {
-    --page: #e8402a; --ink: #2b1230;
+    --page: #e8402a; --ink: #2b1230; --bezel: #1a0b1e; --bezel-edge: #43294a;
     --chat-bg: #efe7dd; --me: #d9fdd3; --them: #ffffff; --chat-ink: #1f2c33; --chat-soft: #667781; --tick: #53bdeb;
     --bar: #ffffff; --bar-line: #e0d6cb; --chip: #ffffff; --chip-ink: #2b1230; --chip-line: #2b1230;
     --sun: #ffd23f; --sun-ink: #3a2a00; --poppy: #e8402a; --poppy-ink: #fff6f2;
@@ -18,7 +18,7 @@
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --page: #1c0f20; --ink: #f6eefa;
+      --page: #1c0f20; --ink: #f6eefa; --bezel: #0d0610; --bezel-edge: #7a6283;
       --chat-bg: #0b141a; --me: #005c4b; --them: #202c33; --chat-ink: #e9edef; --chat-soft: #8696a0; --tick: #53bdeb;
       --bar: #202c33; --bar-line: #2f3b43; --chip: #202c33; --chip-ink: #e9edef; --chip-line: #8696a0;
       --sun: #ffd23f; --sun-ink: #3a2a00; --poppy: #d93a25; --poppy-ink: #fff6f2;
@@ -26,16 +26,36 @@
     }
   }
   :root[data-theme="dark"] {
-    --page: #1c0f20; --ink: #f6eefa;
+    --page: #1c0f20; --ink: #f6eefa; --bezel: #0d0610; --bezel-edge: #7a6283;
     --chat-bg: #0b141a; --me: #005c4b; --them: #202c33; --chat-ink: #e9edef; --chat-soft: #8696a0; --tick: #53bdeb;
     --bar: #202c33; --bar-line: #2f3b43; --chip: #202c33; --chip-ink: #e9edef; --chip-line: #8696a0;
     --sun: #ffd23f; --sun-ink: #3a2a00; --poppy: #d93a25; --poppy-ink: #fff6f2;
     color-scheme: dark;
   }
 
-  html, body { height: 100%; }
+  html, body { margin: 0; }
+  .track { min-height: 100vh; min-height: 100dvh; }
   body { background: var(--page); color: var(--chat-ink); font-family: var(--body); font-size: 16px; line-height: 1.42; }
-  .app { height: 100%; max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; background: var(--chat-bg); }
+  /* The phone: pinned to the screen while the page scrolls behind it. On a real phone it keeps a thin bezel so the chat isn't squeezed. */
+  .stage { position: sticky; top: 0; height: 100vh; height: 100dvh; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .phone { position: relative; flex: none; box-sizing: border-box; width: min(390px, calc(100vw - 12px)); height: min(800px, calc(100vh - 12px)); height: min(800px, calc(100dvh - 12px)); padding: 6px; border-radius: 40px; background: var(--bezel); border: 1.5px solid var(--bezel-edge); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3), 0 16px 36px rgba(0, 0, 0, 0.35); }
+  .phone::before, .phone::after { content: ""; position: absolute; width: 3px; background: var(--bezel-edge); }
+  .phone::before { left: -4.5px; top: 132px; height: 46px; border-radius: 2px 0 0 2px; box-shadow: 0 60px 0 var(--bezel-edge); }
+  .phone::after { right: -4.5px; top: 176px; height: 74px; border-radius: 0 2px 2px 0; }
+  .cam { position: absolute; z-index: 2; top: 13px; left: 50%; transform: translateX(-50%); width: 78px; height: 20px; border-radius: 999px; background: #08030a; }
+  .cam::after { content: ""; position: absolute; right: 7px; top: 6px; width: 8px; height: 8px; border-radius: 50%; background: #241a3a; }
+  .app { position: relative; height: 100%; border-radius: 33px; overflow: hidden; display: flex; flex-direction: column; background: var(--chat-bg); }
+  .sbar { background: var(--poppy); color: var(--poppy-ink); display: flex; justify-content: space-between; align-items: center; height: 30px; padding: 4px 24px 0; font-size: 13px; font-weight: 700; flex: none; }
+  .sbar span { display: flex; align-items: center; gap: 5px; }
+  .sbar svg { height: 11px; width: auto; display: block; fill: currentColor; }
+  .home { background: var(--bar); display: flex; justify-content: center; padding: 2px 0 7px; flex: none; }
+  .home i { width: 118px; height: 4px; border-radius: 4px; background: var(--chat-ink); opacity: 0.5; }
+  @media (min-width: 600px) {
+    .phone { width: min(390px, calc((100vh - 48px) * 0.4875)); height: min(800px, calc(100vh - 48px)); padding: 10px; border-radius: 52px; }
+    .app { border-radius: 41px; }
+    .cam { top: 18px; }
+    .sbar { height: 34px; }
+  }
   :focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
 
   .head { background: var(--poppy); color: var(--poppy-ink); display: flex; align-items: center; gap: 12px; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
@@ -43,18 +63,31 @@
   .head .name { font-family: var(--display); font-weight: 800; font-size: 22px; line-height: 1.1; letter-spacing: -0.01em; }
   .head .status { font-size: 13px; opacity: 0.92; }
 
-  .log { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-block: 14px; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); }
+  .log { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding-block: 14px; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); }
   .msg { max-width: 84%; padding: 8px 10px 5px; border-radius: 10px; overflow-wrap: anywhere; }
   .msg.them { align-self: flex-start; background: var(--them); border-top-left-radius: 2px; }
   .msg.me { align-self: flex-end; background: var(--me); border-top-right-radius: 2px; }
-  .msg + .msg.me, .msg.me + .msg.them { margin-top: 6px; }
+  .row { display: grid; grid-template-rows: 0fr; opacity: 0; transform: translateY(10px); transition: grid-template-rows 0.32s ease, opacity 0.32s ease, transform 0.32s ease; flex: none; }
+  .row.on { grid-template-rows: 1fr; opacity: 1; transform: none; }
+  .row > .in { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+  .row > .in > * { margin-bottom: 6px; }
+  .row.turn > .in { padding-top: 6px; }
+  .still .row { transition: none; }
+  @media (prefers-reduced-motion: reduce) { .row { transition: none; transform: none; } }
   .msg strong { font-weight: 700; }
   .msg a { color: inherit; font-weight: 700; }
   .meta { display: block; text-align: right; font-size: 11px; color: var(--chat-soft); margin-top: 2px; }
   .meta b { color: var(--tick); font-weight: 400; }
   .big { font-family: var(--display); font-weight: 800; font-size: 26px; line-height: 1.08; letter-spacing: -0.02em; }
   .big em { font-style: normal; background: var(--sun); color: var(--sun-ink); padding: 0 0.14em; border-radius: 0.14em; }
-  .day { align-self: center; background: var(--them); color: var(--chat-soft); font-size: 12px; padding: 4px 12px; border-radius: 8px; margin: 8px 0; }
+  .day { align-self: center; background: var(--them); color: var(--chat-soft); font-size: 12px; padding: 4px 12px; border-radius: 8px; margin: 8px 0 14px; }
+  /* A suggestion: a picture with the words as its caption, the way WhatsApp shows a photo message. */
+  .msg.card { width: 84%; padding: 3px 3px 5px; }
+  .card .pic { display: block; width: 100%; height: auto; border-radius: 8px; border-top-left-radius: 1px; }
+  .card .cap { padding: 7px 7px 0; }
+  .card .meta { padding-right: 7px; }
+  .p + .p { margin-top: 9px; }
+  .dot { display: block; padding-left: 0.95em; text-indent: -0.95em; }
   .voice { display: flex; align-items: center; gap: 10px; min-width: 200px; }
   .play { width: 0; height: 0; border-left: 14px solid var(--chat-soft); border-top: 9px solid transparent; border-bottom: 9px solid transparent; flex: none; }
   .wave { display: flex; align-items: center; gap: 2px; height: 26px; flex: 1; }
@@ -73,13 +106,25 @@
   .chip { font: inherit; font-weight: 500; background: var(--chip); color: var(--chip-ink); border: 1.5px solid var(--chip-line); border-radius: 999px; padding: 9px 16px; cursor: pointer; text-align: left; }
   .chip:hover { background: var(--sun); color: var(--sun-ink); border-color: var(--sun); }
   .chip.go { background: var(--sun); color: var(--sun-ink); border-color: var(--sun); font-weight: 700; text-decoration: none; display: inline-block; }
-  .wait { color: var(--chat-soft); font-size: 14px; }
+  .hint { color: var(--chat-soft); font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .hint i { width: 9px; height: 9px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); margin-top: -4px; }
   .note { font-size: 12px; color: var(--chat-soft); }
 </style>
 </head>
 <body>
 
+<div class="track" id="track">
+<div class="stage">
+<div class="phone">
+<div class="cam" aria-hidden="true"></div>
 <div class="app">
+  <div class="sbar" aria-hidden="true">
+    <span id="now">10:30</span>
+    <span>
+      <svg viewBox="0 0 18 11"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="5" y="5" width="3" height="6" rx="1"/><rect x="10" y="2.5" width="3" height="8.5" rx="1"/><rect x="15" y="0" width="3" height="11" rx="1"/></svg>
+      <svg viewBox="0 0 26 11"><rect x="0.6" y="0.6" width="21.8" height="9.8" rx="3" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.6"/><rect x="2.3" y="2.3" width="15" height="6.4" rx="1.6"/><rect x="23.6" y="3.6" width="2" height="3.8" rx="1" opacity="0.6"/></svg>
+    </span>
+  </div>
   <div class="head">
     <svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="17" fill="#2b1230"/><g fill="#ffd23f"><circle cx="17" cy="10.5" r="5"/><circle cx="23.5" cy="17" r="5"/><circle cx="17" cy="23.5" r="5"/><circle cx="10.5" cy="17" r="5"/></g><circle cx="17" cy="17" r="3.6" fill="#e8402a"/></svg>
     <div>
@@ -88,147 +133,214 @@
     </div>
   </div>
 
-  <div class="log" id="log" aria-live="polite">
-    <div class="msg them"><div class="big">Hi, I'm Poppy. I get you one <em>hour</em> back.</div><span class="meta">10:30</span></div>
-    <div class="msg them">When it's all kicking off, you send me a voice note. I send back one thing your three year old can do right now, with stuff you already own.<span class="meta">10:30</span></div>
-    <div class="msg them">Try me. Pretend it's chaos.<span class="meta">10:30</span></div>
-  </div>
+  <div class="log" id="log"></div>
 
   <div class="bar">
-    <div class="chips" id="chips">
-      <button class="chip go" id="start" type="button">Send a voice note</button>
-    </div>
-    <div class="note">A demo of how Poppy behaves. The real Poppy lives in WhatsApp.</div>
+    <div class="chips" id="chips"><span class="hint"><i></i>Scroll to read on</span></div>
+    <div class="note">Poppy's real message shapes, with a made up family. She lives in WhatsApp.</div>
   </div>
+  <div class="home" aria-hidden="true"><i></i></div>
 </div>
+</div>
+</div>
+</div>
+
+<!--
+  POPPY'S PICTURES. These are drawn by Poppy's own code (the starter pictures in the poppy repo), copied here as they are.
+  A card can only use a picture that is in this block. Today that is: painting
+-->
+<template id="pictures">
+<svg data-picture="painting" viewBox="0 0 600 340" role="img" aria-label="A sheet of paper with colourful squiggles, three pots of paint and a brush"><rect width="600" height="340" fill="#E6F1FB"/><rect y="250" width="600" height="90" fill="#FAEEDA"/><rect y="244" width="600" height="8" fill="#D3D1C7"/><path d="M90 286 L170 196 H510 L470 286 Z" fill="#FFFFFF"/><path d="M190 260 q40-50 90-20 q50 30 100-14" fill="none" stroke="#D85A30" stroke-width="16" stroke-linecap="round"/><path d="M210 236 q60-30 110 0" fill="none" stroke="#EF9F27" stroke-width="12" stroke-linecap="round"/><circle cx="420" cy="232" r="22" fill="#378ADD"/><circle cx="246" cy="270" r="10" fill="#639922"/><rect x="110" y="292" width="46" height="36" rx="8" fill="#F1EFE8"/><ellipse cx="133" cy="294" rx="20" ry="6" fill="#D85A30"/><rect x="168" y="292" width="46" height="36" rx="8" fill="#F1EFE8"/><ellipse cx="191" cy="294" rx="20" ry="6" fill="#378ADD"/><rect x="226" y="292" width="46" height="36" rx="8" fill="#F1EFE8"/><ellipse cx="249" cy="294" rx="20" ry="6" fill="#639922"/><g transform="rotate(-30 470 150)"><rect x="462" y="80" width="14" height="110" rx="6" fill="#EF9F27"/><rect x="460" y="184" width="18" height="16" fill="#B4B2A9"/><path d="M460 200 h18 l-4 26 h-10 Z" fill="#D4537E"/></g></svg>
+</template>
+
+<!--
+  THE SCRIPT. Edit only the block below to change the conversation.
+
+  ONE LINE, ONE MESSAGE
+
+    big: text            Poppy, in the large headline style
+    poppy: text          a message from Poppy. Her check-in question and her "Saved" replies are just this
+    mum: text            a message from the mum
+    --- text             a divider across the chat, such as "Two days later"
+    time: 10:31          sets the clock shown on the messages that follow (UK time)
+    show: 2              how many messages are already there before any scrolling (first line only)
+    # text               a note to yourself, never shown
+
+  A SUGGESTION (several lines, one message). Start with card: and put the rest straight under it.
+  Poppy always shows them in this order, whatever order you type them in.
+
+    card: text           the name of the activity. Starts the card
+    picture: painting    the picture on top. Leave the line out for a card with no picture
+    setup: text          the line under the name: "2 min to set up · keeps Maya busy for about 20 min"
+    grab: text           what to fetch. Poppy adds the bold "Grab:" herself
+    then: text           what to do. Poppy adds the bold "Then:" herself
+    why: text            one line on what it builds and why it suits this child today
+    safety: text         one short thing to watch, added after the why. Leave it out if there's nothing
+    last: text           the closing line: "Tell me how it goes, or ask for something different."
+
+  A LOOK BACK (several lines, one message). Start with lookback: and put the rest straight under it.
+
+    lookback: text       the heading, shown in bold: "Maya's recent play"
+    - text               one activity per line, newest first: "- Tue 10 Nov: Elsa's ball gown, not a hit, 5 min"
+    last: text           the closing line: a pattern she has spotted, then "Want to repeat one, or try something new?"
+
+  A card or a look back ends at the next line that isn't one of its parts. Empty lines are fine anywhere.
+  Wrap words in *stars* to make them bold.
+
+  NOT BUILT INTO POPPY YET (these still work here, but the real Poppy doesn't do them, so the page doesn't use them)
+
+    voice 0:14: text     a voice note from the mum, 14 seconds long, with what she said underneath
+    log: text            a "Logged" note inside Poppy's next message
+-->
+<script type="text/plain" id="script">
+show: 2
+
+time: 10:30
+big: Hi, I'm Poppy. You need a minute. I've got *one idea*.
+poppy: This is Anastasia. Her daughter Maya is three and it is all kicking off. Scroll to see what happened.
+
+# 1. The suggestion. On a first chat Poppy needs the child's age and where they are before she suggests anything
+time: 10:31
+mum: Poppy, help. Maya is climbing the walls and I need to sit down.
+poppy: On it. How old is Maya?
+mum: 3. We're at home. She only cares about Frozen, and all I can find is a Frozen colouring book and some coloured pencils.
+
+time: 10:32
+card: Elsa's ball gown
+picture: painting
+setup: 2 min to set up · keeps Maya busy for about 20 min
+grab: the Frozen colouring book, the coloured pencils
+then: open the book on the table at a page with Elsa on it, and tell Maya the ball is tonight and the dress has no colour yet.
+why: Colouring builds her pencil grip, and it's wall to wall Frozen, so it should hold her while you sit down.
+last: Tell me how it goes, or ask for something different.
+
+# 2. The review. Poppy asks once, an hour after the activity was meant to end
+time: 11:52
+poppy: How did "Elsa's ball gown" go? Tell me how long it lasted and what they made of it, and I'll remember for next time.
+mum: Five minutes. Then she threw the book across the room and said her first swear word. It rhymes with duck.
+poppy: Oh no. Saved: not a hit, 5 minutes, one new word. Was it the colouring, or just the moment?
+mum: The moment. She skipped her nap.
+poppy: Noted. Colouring gets another go on a day with a nap in it.
+
+--- Two days later
+
+# 3. The look back. Only what really happened, and Poppy keeps the gist of how it went, not the exact words
+time: 19:05
+mum: Her gran wants to know what Maya has been up to this week. And what was that word again?
+
+lookback: Maya's recent play
+- Tue 10 Nov: Elsa's ball gown, not a hit, 5 min
+last: Just the one so far. I keep the gist, not the gossip, so the word itself is yours to remember. Want to give it another go, or try something new?
+
+mum: Something new. Tomorrow. I need a lie down first.
+
+# The ending
+poppy: That's me. One idea, with what you've got. I remember how it went, so you don't have to.
+poppy: Send */forget* and I delete everything I know about you. My WhatsApp number opens soon.
+</script>
 
 <script>
 (function () {
+  var STEP = 150; // pixels of scrolling per message
+  var track = document.getElementById('track');
   var log = document.getElementById('log');
   var chips = document.getElementById('chips');
-  var calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var clock = 10 * 60 + 31;
+  var now = document.getElementById('now');
 
-  var themes = {
-    frozen: { label: 'Frozen', col: "a dress for Elsa's ball", box: "it's Elsa's ice palace, and every toy is a guest at the ball", stick: 'every sticker is a snowflake for Elsa' },
-    dino: { label: 'Dinosaurs', col: 'the biggest dinosaur, any colour but green', box: "it's the dinosaur cave, and every dinosaur needs tucking in for the night", stick: 'every sticker is a dinosaur egg to hide' },
-    digger: { label: 'Diggers', col: 'a digger doing the muddiest job ever', box: "it's the digger garage, and every truck has to be parked inside", stick: 'every sticker is a rock the diggers have to move' }
-  };
-  var kit = {
-    col: { label: 'Colouring book and pencils', name: 'Colouring', obj: 'colouring book', idea: function (t) { return 'Table, colouring book, pencils. The job: colour ' + t.col + '. Do the first two minutes together, then drift off.'; } },
-    box: { label: 'A big cardboard box', name: 'Box den', obj: 'teddy', idea: function (t) { return 'Big cardboard box on its side, a cushion inside. Staples and tape off first. The story: ' + t.box + '. Help with the first two, then drift off.'; } },
-    stick: { label: 'Stickers and paper', name: 'Stickers', obj: 'sticker sheet', idea: function (t) { return 'Stickers and one sheet of paper. One rule: ' + t.stick + '. Do the first three together, then drift off.'; } }
-  };
+  function esc(t) { return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function rich(t, tag) { return esc(t).replace(/\*([^*]+)\*/g, '<' + tag + '>$1</' + tag + '>'); }
+  var bars = [8, 16, 22, 12, 24, 18, 9, 20, 26, 14, 19, 8, 15, 23, 11, 17, 7, 13].map(function (h) { return '<i style="height:' + h + 'px"></i>'; }).join('');
 
-  function time() { var h = Math.floor(clock / 60), m = clock % 60; return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m; }
-  function down() { log.scrollTop = log.scrollHeight; }
-  function wait(ms) { return new Promise(function (r) { setTimeout(r, calm ? 0 : ms); }); }
-
-  function bubble(who, html) {
+  var clock = '', show = 1, pending = '', last = '', rows = [];
+  function add(who, html, extra) {
+    var row = document.createElement('div');
+    row.className = 'row' + (last && last !== who ? ' turn' : '');
+    last = who;
+    var inner = document.createElement('div'); inner.className = 'in';
     var el = document.createElement('div');
-    el.className = 'msg ' + who;
-    el.innerHTML = html + '<span class="meta">' + time() + (who === 'me' ? ' <b>&check;&check;</b>' : '') + '</span>';
-    log.appendChild(el); down();
-  }
-  function day(text) { var el = document.createElement('div'); el.className = 'day'; el.textContent = text; log.appendChild(el); down(); }
-
-  async function poppy(html) {
-    chips.innerHTML = '<span class="wait">Poppy is typing</span>';
-    var t = document.createElement('div');
-    t.className = 'typing'; t.innerHTML = '<i></i><i></i><i></i>';
-    log.appendChild(t); down();
-    await wait(650 + Math.min(900, html.length * 6));
-    t.remove();
-    bubble('them', html);
-    await wait(250);
-  }
-
-  function ask(options) {
-    return new Promise(function (resolve) {
-      chips.innerHTML = '';
-      options.forEach(function (o) {
-        var b = document.createElement('button');
-        b.type = 'button'; b.className = 'chip'; b.textContent = o.label;
-        b.addEventListener('click', function () { chips.innerHTML = ''; resolve(o); });
-        chips.appendChild(b);
-      });
-      var first = chips.querySelector('button');
-      if (first && document.activeElement === document.body) first.focus({ preventScroll: true });
-    });
-  }
-  async function say(options) { var o = await ask(options); bubble('me', o.say || o.label); return o; }
-
-  function entry(name, lasted, what) {
-    return '<div class="entry"><span>Logged</span>' + name + ' &middot; ' + lasted + ' &middot; ' + what + '</div>';
-  }
-
-  async function run() {
-    bubble('me',
-      '<div class="voice"><span class="play"></span><span class="wave">' +
-      [8, 16, 22, 12, 24, 18, 9, 20, 26, 14, 19, 8, 15, 23, 11, 17, 7, 13].map(function (h) { return '<i style="height:' + h + 'px"></i>'; }).join('') +
-      '</span><span>0:06</span></div><div class="heard">"It\'s all kicking off. I need something. Fast."</div>');
-
-    await poppy("On it. First time, so two quick questions. What are they mad about this week?");
-    var t = await say([{ label: 'Frozen', k: 'frozen' }, { label: 'Dinosaurs', k: 'dino' }, { label: 'Diggers', k: 'digger' }]);
-    var theme = themes[t.k];
-
-    await poppy("And what's within reach?");
-    var s = await say([{ label: kit.col.label, k: 'col' }, { label: kit.box.label, k: 'box' }, { label: kit.stick.label, k: 'stick' }]);
-    var thing = kit[s.k];
-
-    await poppy(thing.idea(theme));
-    await poppy("That's it. One idea, not forty. Go. Then tell me how it went, even if it went badly.");
-
-    clock += 11;
-    var r = await say([
-      { label: 'Forty quiet minutes', k: 'good', say: 'Forty quiet minutes. I drank a hot tea.' },
-      { label: 'Five minutes, then it got thrown', k: 'bad', say: 'Five minutes. Then it got thrown across the room and they said their first swear word.' }
-    ]);
-
-    var word = '';
-    if (r.k === 'good') {
-      clock += 29;
-      await poppy('A hot one. Lovely.' + entry(thing.name, '40 min', theme.label + ' themed, a keeper'));
-      await poppy("I'll bring that back when you need a sure thing. And I won't ask about " + theme.label + " again. I know now.");
-    } else {
-      await poppy('Oh no. Off the list for now.' + entry(thing.name, '5 min', 'thrown, first swear word'));
-      await poppy('Which word? For the record.');
-      var w = await say([
-        { label: 'It rhymes with duck', k: 'duck', say: 'It rhymes with duck.' },
-        { label: "I'm not typing that", k: 'none', say: "I'm not typing that." }
-      ]);
-      word = w.k;
-      await poppy(w.k === 'duck' ? 'Noted, word for word. Strong debut.' : 'Fair. Logged as "the word".');
+    if (who === 'day') { el.className = 'day'; el.innerHTML = html; }
+    else {
+      el.className = 'msg ' + who + (extra ? ' ' + extra : '');
+      el.innerHTML = html + '<span class="meta">' + esc(clock) + (who === 'me' ? ' <b>&check;&check;</b>' : '') + '</span>';
     }
+    row.setAttribute('data-clock', clock);
+    inner.appendChild(el); row.appendChild(inner); log.appendChild(row); rows.push(row);
+  }
 
-    await wait(500);
-    day('Two days later');
-    clock = 19 * 60 + 5;
-
-    if (r.k === 'good') {
-      await say([{ label: 'What worked on Tuesday?', say: 'What was that thing that worked on Tuesday?' }]);
-      await poppy(thing.name + ', ' + theme.label + ' themed. Tuesday, 10:42. Forty minutes and one hot tea. Want it again, or something new?');
+  // A suggestion and a look back are each one message written over several lines. They are collected here, then drawn in Poppy's fixed order.
+  var block = null;
+  var pictures = document.getElementById('pictures').content;
+  function para(html) { return html ? '<div class="p">' + html + '</div>' : ''; }
+  function flush() {
+    var b = block; block = null;
+    if (!b) return;
+    var s = function (k) { return b[k] ? rich(b[k], 'strong') : ''; };
+    if (b.kind === 'card') {
+      var pic = b.picture ? pictures.querySelector('[data-picture="' + b.picture.replace(/[^a-z0-9-]/gi, '') + '"]') : null;
+      var steps = [b.grab ? '<strong>Grab:</strong> ' + s('grab') : '', b.then ? '<strong>Then:</strong> ' + s('then') : ''].filter(Boolean).join('<br>');
+      var top = ['<strong>' + esc(b.name) + '</strong>', s('setup')].filter(Boolean).join('<br>');
+      var why = [s('why'), s('safety')].filter(Boolean).join(' ');
+      var cap = '<div class="cap">' + para(top) + para(steps) + para(why) + para(s('last')) + '</div>';
+      if (!pic) return add('them', para(top) + para(steps) + para(why) + para(s('last'))); // no picture, so it goes as a plain message, as Poppy does
+      var svg = pic.cloneNode(true); svg.setAttribute('class', 'pic');
+      add('them', svg.outerHTML + cap, 'card');
     } else {
-      await say([{ label: 'What was the word again?', say: 'What was the word they said on Tuesday? Their gran is asking.' }]);
-      await poppy(word === 'duck'
-        ? 'Rhymes with duck. Tuesday, 10:42, just after the ' + thing.obj + ' left their hands. Tell gran it was "fudge".'
-        : 'You never told me. You said "I\'m not typing that". Tuesday, 10:42, just after the ' + thing.obj + ' left their hands.');
+      var list = b.items.map(function (t) { return '<span class="dot">&bull; ' + rich(t, 'strong') + '</span>'; }).join('');
+      add('them', para('<strong>' + esc(b.name) + '</strong>' + list) + para(s('last')));
     }
+  }
 
-    await poppy("That's me. One idea, with what you've got. I remember how it went, so you don't have to.");
-    await poppy("Two things I'm not. I'm not a babysitter, so you're still nearby with one ear open. And I'm not nosy. Send <strong>/forget</strong> and I delete everything I know about you.");
-    await poppy('I\'m being built today, live, by three people on a Twitch stream. My WhatsApp number opens soon.');
+  document.getElementById('script').textContent.split('\n').forEach(function (line) {
+    line = line.trim();
+    if (!line || line.charAt(0) === '#') return;
+    var m;
+    if ((m = line.match(/^card:\s*(.+)$/i))) { flush(); block = { kind: 'card', name: m[1] }; return; }
+    if ((m = line.match(/^lookback:\s*(.+)$/i))) { flush(); block = { kind: 'lookback', name: m[1], items: [] }; return; }
+    if (block && (m = line.match(/^last:\s*(.+)$/i))) { block.last = m[1]; return; }
+    if (block && block.kind === 'card' && (m = line.match(/^(picture|setup|grab|then|why|safety):\s*(.+)$/i))) { block[m[1].toLowerCase()] = m[2]; return; }
+    if (block && block.kind === 'lookback' && (m = line.match(/^(?:-(?!-)|\u2022)\s*(.+)$/))) { block.items.push(m[1]); return; }
+    flush();
+    if ((m = line.match(/^---\s*(.*)$/))) return add('day', esc(m[1]));
+    if ((m = line.match(/^time:\s*(.+)$/i))) { clock = m[1]; return; }
+    if ((m = line.match(/^show:\s*(\d+)$/i))) { show = Math.max(1, +m[1]); return; }
+    if ((m = line.match(/^log:\s*(.+)$/i))) { pending = '<div class="entry"><span>Logged</span>' + rich(m[1], 'strong') + '</div>'; return; }
+    if ((m = line.match(/^big:\s*(.+)$/i))) return add('them', '<div class="big">' + rich(m[1], 'em') + '</div>');
+    if ((m = line.match(/^voice\s+([\d:]+):\s*(.+)$/i))) return add('me', '<div class="voice"><span class="play"></span><span class="wave">' + bars + '</span><span>' + esc(m[1]) + '</span></div><div class="heard">"' + rich(m[2], 'strong') + '"</div>');
+    if ((m = line.match(/^poppy:\s*(.+)$/i))) { add('them', rich(m[1], 'strong') + pending); pending = ''; return; }
+    if ((m = line.match(/^mum:\s*(.+)$/i))) return add('me', rich(m[1], 'strong'));
+  });
+  flush();
 
+  show = Math.min(show, rows.length);
+  var steps = rows.length - show;
+  track.style.height = 'calc(100vh + ' + (steps * STEP + 40) + 'px)';
+  track.style.height = 'calc(100dvh + ' + (steps * STEP + 40) + 'px)';
+
+  var hint = chips.innerHTML, shown = -1, ended = null;
+  function end(on) {
+    if (on === ended) return; ended = on;
+    if (!on) { chips.innerHTML = hint; return; }
     chips.innerHTML = '';
     var a = document.createElement('a');
     a.className = 'chip go'; a.href = 'https://www.twitch.tv/40for40'; a.textContent = 'Watch Poppy being built';
-    var again = document.createElement('button');
-    again.type = 'button'; again.className = 'chip'; again.textContent = 'Try a different day';
-    again.addEventListener('click', function () { location.reload(); });
-    chips.appendChild(a); chips.appendChild(again);
+    chips.appendChild(a);
   }
-
-  document.getElementById('start').addEventListener('click', function () { chips.innerHTML = ''; run(); });
+  function update() {
+    var y = Math.max(0, window.scrollY - track.offsetTop);
+    var n = Math.min(rows.length, show + Math.floor((y + STEP * 0.25) / STEP));
+    if (n !== shown) {
+      for (var i = 0; i < rows.length; i++) rows[i].classList.toggle('on', i < n);
+      shown = n;
+      var at = rows[n - 1].getAttribute('data-clock');
+      if (at) now.textContent = at;
+    }
+    end(n >= rows.length);
+  }
+  window.addEventListener('scroll', update, { passive: true });
+  window.addEventListener('resize', update);
+  log.classList.add('still'); // the messages already there at the start appear without animating
+  update();
+  setTimeout(function () { log.classList.remove('still'); }, 80);
 })();
 </script>
 </body>
