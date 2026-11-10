@@ -20,6 +20,8 @@ export interface Address {
   userId: string | null;
   /** Who carried the message. Left out, it's Meta's Cloud API. */
   provider?: Provider;
+  /** Twilio only: which of our numbers the person wrote to, as `whatsapp:+` then the number. Replies go out from it. */
+  sender?: string;
 }
 
 /** The two ways a WhatsApp message can reach us: Meta's Cloud API, or Twilio's WhatsApp sandbox as the fallback. */

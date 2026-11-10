@@ -2,8 +2,8 @@ import { env, exports } from "cloudflare:workers";
 import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { REPLIES, type UserBrain } from "./brain";
-import { ALICE as FIXED, brainFor, fakeSid, fakeTwilioParams, fakeTwilioPerson, mockClaude, mockGraph, mockTwilio, postTwilio, sayAs, sayOnTwilio, sentTexts, TWILIO_WEBHOOK_URL, type GraphMock, type TwilioMock } from "./testing";
-import { incomingTwilioMessage, sendTwilioText, signedUrlCandidates, signTwilio, TWILIO_MAX_CHARS, verifyTwilioSignature } from "./twilio";
+import { ALICE as FIXED, brainFor, FAKE_SENDER, fakeSid, fakeTwilioParams, fakeTwilioPerson, mockClaude, mockGraph, mockTwilio, OTHER_FAKE_SENDER, postTwilio, sayAs, sayOnTwilio, sentTexts, TWILIO_WEBHOOK_URL, type GraphMock, type TwilioMock } from "./testing";
+import { incomingTwilioMessage, sendTwilioText, signedUrlCandidates, signTwilio, TWILIO_MAX_CHARS, twilioSenders, verifyTwilioSignature } from "./twilio";
 import { brainName, WhatsAppError, type Address } from "./whatsapp";
 
 let twilio: TwilioMock;
@@ -39,7 +39,7 @@ async function settle(who: Address = ANNA): Promise<void> {
   await vi.waitFor(async () => expect(await inBrain(who, (_, state) => unhandled(state))).toBe(0));
 }
 
-const config = (gapMs = 0) => ({ accountSid: env.TWILIO_ACCOUNT_SID, authToken: env.TWILIO_AUTH_TOKEN, from: env.TWILIO_WHATSAPP_FROM, gapMs });
+const config = (gapMs = 0) => ({ accountSid: env.TWILIO_ACCOUNT_SID, authToken: env.TWILIO_AUTH_TOKEN, from: FAKE_SENDER, gapMs });
 
 describe("verifyTwilioSignature", () => {
   it("matches the worked example in Twilio's docs", async () => {
@@ -77,12 +77,16 @@ describe("verifyTwilioSignature", () => {
 });
 
 describe("incomingTwilioMessage", () => {
-  const ours = () => ({ accountSid: env.TWILIO_ACCOUNT_SID, from: env.TWILIO_WHATSAPP_FROM });
+  const ours = () => ({ accountSid: env.TWILIO_ACCOUNT_SID, senders: twilioSenders(env.TWILIO_WHATSAPP_FROM) });
   const parse = (extra: Record<string, string>, body = "Hello") => incomingTwilioMessage(new URLSearchParams(fakeTwilioParams(ANNA, body, extra)), ours());
 
   it("reads a text message with its sender's number", () => {
     const sid = fakeSid();
-    expect(parse({ MessageSid: sid })).toEqual({ id: sid, phone: ANNA.phone, userId: null, provider: "twilio", kind: "text", text: "Hello" });
+    expect(parse({ MessageSid: sid })).toEqual({ id: sid, phone: ANNA.phone, userId: null, provider: "twilio", sender: FAKE_SENDER, kind: "text", text: "Hello" });
+  });
+
+  it("takes a message to any of our sender numbers and keeps which one it was", () => {
+    expect(parse({ To: OTHER_FAKE_SENDER })?.sender).toBe(OTHER_FAKE_SENDER);
   });
 
   it("marks media and locations as unsupported", () => {
@@ -92,7 +96,7 @@ describe("incomingTwilioMessage", () => {
 
   it("ignores another account, another sender number, a non-WhatsApp sender, a bad id and an empty body", () => {
     expect(parse({ AccountSid: "ACfake00000000000000000000000000002" })).toBeNull();
-    expect(parse({ To: `${env.TWILIO_WHATSAPP_FROM}0` })).toBeNull();
+    expect(parse({ To: `${FAKE_SENDER}0` })).toBeNull();
     expect(parse({ From: `+${FIXED.phone}` })).toBeNull();
     expect(parse({ MessageSid: "not-a-sid" })).toBeNull();
     expect(parse({}, "   ")).toBeNull();
@@ -102,7 +106,7 @@ describe("incomingTwilioMessage", () => {
 describe("sendTwilioText", () => {
   it("posts the sender, the recipient and the body as form fields with basic auth", async () => {
     await sendTwilioText(config(), FIXED.phone!, "Hello");
-    expect(twilio.requests).toEqual([{ From: env.TWILIO_WHATSAPP_FROM, To: `whatsapp:+${FIXED.phone}`, Body: "Hello" }]);
+    expect(twilio.requests).toEqual([{ From: FAKE_SENDER, To: `whatsapp:+${FIXED.phone}`, Body: "Hello" }]);
   });
 
   it("splits a reply that's longer than one message can hold", async () => {
@@ -116,13 +120,13 @@ describe("sendTwilioText", () => {
 
   it("puts a picture on top, with a short reply as its caption", async () => {
     await sendTwilioText(config(), FIXED.phone!, "Try dino bath time.", "https://example.com/p/toy-bath.png");
-    expect(twilio.requests).toEqual([{ From: env.TWILIO_WHATSAPP_FROM, To: `whatsapp:+${FIXED.phone}`, Body: "Try dino bath time.", MediaUrl: "https://example.com/p/toy-bath.png" }]);
+    expect(twilio.requests).toEqual([{ From: FAKE_SENDER, To: `whatsapp:+${FIXED.phone}`, Body: "Try dino bath time.", MediaUrl: "https://example.com/p/toy-bath.png" }]);
   });
 
   it("sends the picture on its own, then the text, when the reply is too long for a caption", async () => {
     const long = "word ".repeat(300).trim();
     await sendTwilioText(config(), FIXED.phone!, long, "https://example.com/p/toy-bath.png");
-    expect(twilio.requests[0]).toEqual({ From: env.TWILIO_WHATSAPP_FROM, To: `whatsapp:+${FIXED.phone}`, MediaUrl: "https://example.com/p/toy-bath.png" });
+    expect(twilio.requests[0]).toEqual({ From: FAKE_SENDER, To: `whatsapp:+${FIXED.phone}`, MediaUrl: "https://example.com/p/toy-bath.png" });
     expect(twilio.requests.slice(1).map((r) => r.Body).join(" ")).toBe(long);
   });
 
@@ -149,7 +153,7 @@ describe("the Twilio webhook", () => {
     expect(await response.text()).toContain("<Response></Response>");
     await settle();
 
-    expect(twilio.requests).toEqual([{ From: env.TWILIO_WHATSAPP_FROM, To: `whatsapp:+${ANNA.phone}`, Body: "Hello back." }]);
+    expect(twilio.requests).toEqual([{ From: FAKE_SENDER, To: `whatsapp:+${ANNA.phone}`, Body: "Hello back." }]);
     expect(graph.requests).toEqual([]);
     expect(claude.requests).toHaveLength(1);
     expect(claude.requests[0].messages).toEqual([{ role: "user", content: [{ type: "text", text: "Hi" }] }]);
@@ -212,6 +216,15 @@ describe("a person on Twilio", () => {
       expect(brain.listSessions()).toHaveLength(1);
       expect(state.storage.sql.exec("SELECT value FROM settings WHERE key = 'provider'").one().value).toBe("twilio");
     });
+  });
+
+  it("is answered from the sender number they wrote to", async () => {
+    mockClaude(text("One."), text("Two."));
+    await sayOnTwilio(ANNA, "First", { To: OTHER_FAKE_SENDER });
+    await settle();
+    await sayOnTwilio(ANNA, "Second");
+    await settle();
+    expect(twilio.requests.map((r) => r.From)).toEqual([OTHER_FAKE_SENDER, FAKE_SENDER]);
   });
 
   it("has a different brain from the same number on Meta, and each is answered its own way", async () => {
