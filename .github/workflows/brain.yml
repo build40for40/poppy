@@ -1,15 +1,9 @@
 name: Brain
 
+# No path filter: landing/index.html is bundled into the Worker, so a change outside workers/brain can change what is live.
 on:
   pull_request:
-    paths:
-      - workers/brain/**
-      - .github/workflows/brain.yml
-  push:
-    branches: [main]
-    paths:
-      - workers/brain/**
-      - .github/workflows/brain.yml
+  workflow_call:
 
 permissions:
   contents: read
@@ -18,8 +12,9 @@ defaults:
   run:
     working-directory: workers/brain
 
+# A newer push to a pull request replaces its run. A run called from the deploy workflow gets a group of its own, so every commit on main is checked.
 concurrency:
-  group: brain-${{ github.ref }}
+  group: brain-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:

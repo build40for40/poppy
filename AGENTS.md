@@ -17,7 +17,7 @@ Shared 40 for 40 context lives in `../AGENTS.md`.
 - One Worker, with the webhook route and the Durable Object together.
 - A person is known by the sender in a webhook whose signature checks out, never by anything typed in a message. There's no sign-in.
 - `/forget` deletes everything the brain holds about the sender.
-- Deploys go through CI, never by hand.
+- Deploys go through CI, never by hand: every push to `main` deploys once the typecheck and tests pass.
 - Poppy only suggests play activities and records how they went. Anything else is politely out of scope.
 - A chat and a play session are different things. A chat ends after 30 minutes quiet. A play session opens when Poppy suggests an activity and stays open until the parent checks in, however many chats that takes.
 - Memory is `USER.md` (the child and the family), `interests.md` (a running note of what the child is into), `plays/` (one note per play session, with how it went) and `sessions/` (one note per chat).
