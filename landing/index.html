@@ -131,10 +131,14 @@
 
   /* The live chat: the same phone, with a real message box. The story's log and bar are swapped for these while it's open. */
   .app.live #log, .app.live .bar, .app.live .head .narrow, .app.live .head .wide { display: none; }
-  .app:not(.live) #live, .app:not(.live) .compose, .app:not(.live) .back, .app:not(.live) .head .inlive { display: none; }
+  .app:not(.live) #live, .app:not(.live) .compose, .app:not(.live) .back, .app:not(.live) .fresh, .app:not(.live) .head .inlive { display: none; }
   .track.live { height: 100vh !important; height: 100dvh !important; }
   .head > div { min-width: 0; }
-  .back { margin-left: auto; flex: none; font: inherit; font-size: 12px; font-weight: 700; color: var(--poppy-ink); background: rgba(0, 0, 0, 0.2); border: 0; border-radius: 999px; padding: 7px 11px; cursor: pointer; white-space: nowrap; }
+  .app.live .head { gap: 8px; }
+  .fresh { margin-left: auto; flex: none; width: 30px; height: 30px; border-radius: 50%; border: 0; padding: 0; background: rgba(0, 0, 0, 0.2); color: var(--poppy-ink); display: grid; place-items: center; cursor: pointer; }
+  .fresh svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+  .msg .again { font: inherit; font-weight: 700; color: inherit; background: none; border: 0; padding: 0; margin-top: 5px; display: block; text-align: left; text-decoration: underline; cursor: pointer; }
+  .back { flex: none; font: inherit; font-size: 12px; font-weight: 700; color: var(--poppy-ink); background: rgba(0, 0, 0, 0.2); border: 0; border-radius: 999px; padding: 7px 11px; cursor: pointer; white-space: nowrap; }
   #live { overflow-y: auto; justify-content: flex-start; overscroll-behavior: contain; scrollbar-width: thin; }
   #live > :first-child { margin-top: auto; }
   .sys { align-self: center; text-align: center; background: var(--them); color: var(--chat-soft); font-size: 12.5px; padding: 5px 12px; border-radius: 8px; max-width: 88%; }
@@ -177,8 +181,9 @@
     <svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="17" fill="#2b1230"/><g fill="#ffd23f"><circle cx="17" cy="10.5" r="5"/><circle cx="23.5" cy="17" r="5"/><circle cx="17" cy="23.5" r="5"/><circle cx="10.5" cy="17" r="5"/></g><circle cx="17" cy="17" r="3.6" fill="#e8402a"/></svg>
     <div>
       <div class="name">Poppy</div>
-      <div class="status"><span class="narrow">You need a minute. I've got <em>one idea</em>.</span><span class="wide">online, and not judging</span><span class="inlive">online, not judging</span></div>
+      <div class="status"><span class="narrow">You need a minute. I've got <em>one idea</em>.</span><span class="wide">online, and not judging</span><span class="inlive">demo chat</span></div>
     </div>
+    <button type="button" class="fresh" id="fresh" aria-label="Start a new chat" title="Start a new chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
     <button type="button" class="back" id="back">Back to the story</button>
   </div>
 
@@ -313,11 +318,13 @@ poppy: Send */forget* and I delete everything I know about you. My WhatsApp numb
     canned: 'Preview only: these replies are canned.',
     closed: "That's the end of the demo, I'm afraid. The real me lives on WhatsApp and my number opens soon. Until then, come and watch me being built.",
     daily: "I'm having a lie down. The demo has had a very busy day. Come back tomorrow?",
-    oops: "Poppy didn't catch that. Have another go."
+    oops: "Poppy didn't catch that. Have another go.",
+    remembers: 'Poppy remembers your last chat. Tap + to start fresh.'
   };
   // Canned mode: how many messages a visitor gets, the message that fails on purpose, and the replies, in order. A picture is the id of one in the pictures block.
   var CANNED_LEFT = 4;
   var CANNED_FAIL_WORD = 'fail';
+  var CANNED_SLOW_WORD = 'slow';                // this message gets its reply after five seconds, to test leaving mid-reply
   var CANNED_REPLIES = [
     { picture: 'painting', text: "*Rainbow road*\n2 min to set up · keeps them busy for about 20 min\n\n*Grab:* a big sheet of paper, washable paints, a chunky brush\n*Then:* tape the paper to the table and ask for the longest rainbow road anyone has ever painted.\n\nBig arm movements build the shoulder strength writing needs later, and a road never has to be finished. Old T-shirt on first.\n\nTell me how it goes, or ask for something different." },
     { picture: null, text: "Noted. I'll remember that for next time. How long did it keep them busy?" },
@@ -455,26 +462,30 @@ poppy: Send */forget* and I delete everything I know about you. My WhatsApp numb
   var live = document.getElementById('live'), form = document.getElementById('compose');
   var say = document.getElementById('say'), sendBtn = document.getElementById('send'), starters = document.getElementById('starters');
   var started = false, waiting = false, closed = false, storyY = 0, liveLast = '', cannedLeft = CANNED_LEFT, cannedAt = 0, memoryId = '';
+  var chat = 0, flight = null, typingClock = 0; // chat counts the chats started, so a reply meant for an earlier one can be dropped
+  var returning = false; // this browser has chatted before, so the Poppy behind its id still remembers
+  try { returning = !!localStorage.getItem(VISITOR_ID_KEY); } catch (e) {}
   var liveTyping = typing.cloneNode(true);
 
   function ukTime() {
     try { return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/London' }).format(new Date()); }
     catch (e) { var d = new Date(); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
   }
+  function freshId() {
+    var id;
+    if (window.crypto && crypto.randomUUID) id = crypto.randomUUID();
+    else id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      var r = window.crypto && crypto.getRandomValues ? crypto.getRandomValues(new Uint8Array(1))[0] & 15 : Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 3) | 8).toString(16);
+    });
+    memoryId = id;
+    try { localStorage.setItem(VISITOR_ID_KEY, id); } catch (e) {}
+    return id;
+  }
   function visitorId() {
     var id = '';
     try { id = localStorage.getItem(VISITOR_ID_KEY) || ''; } catch (e) {}
-    if (!id) id = memoryId;
-    if (!id) {
-      if (window.crypto && crypto.randomUUID) id = crypto.randomUUID();
-      else id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-        var r = window.crypto && crypto.getRandomValues ? crypto.getRandomValues(new Uint8Array(1))[0] & 15 : Math.random() * 16 | 0;
-        return (c === 'x' ? r : (r & 3) | 8).toString(16);
-      });
-      memoryId = id;
-      try { localStorage.setItem(VISITOR_ID_KEY, id); } catch (e) {}
-    }
-    return id;
+    return id || memoryId || freshId();
   }
   function toBottom() { live.scrollTop = live.scrollHeight; }
   function liveRow(who, el) {
@@ -537,20 +548,24 @@ poppy: Send */forget* and I delete everything I know about you. My WhatsApp numb
   // Asking Poppy. Both ways answer with {status, body}, or fail outright when nothing comes back.
   function askServer(text) {
     var stop = window.AbortController ? new AbortController() : null;
+    flight = stop;
     var clock = setTimeout(function () { if (stop) stop.abort(); }, REPLY_TIMEOUT_MS);
     return fetch(API_PATH, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: visitorId(), text: text }), signal: stop ? stop.signal : undefined })
       .then(function (res) { return res.json().catch(function () { return null; }).then(function (body) { clearTimeout(clock); return { status: res.status, body: body }; }); },
             function (err) { clearTimeout(clock); throw err; });
   }
   function askCanned(text) {
+    visitorId(); // canned replies don't use the id, but keeping one makes this mode behave like the real one after a reload
+    var asked = chat;
     return new Promise(function (resolve) {
       setTimeout(function () {
+        if (asked !== chat) return resolve({ status: 0, body: null }); // that chat is gone, so it doesn't use up the new one's messages
         if (text.toLowerCase() === CANNED_FAIL_WORD) return resolve({ status: 500, body: { error: 'canned_failure' } });
         if (cannedLeft <= 0) return resolve({ status: 429, body: { error: 'visitor_limit' } });
         var reply = CANNED_REPLIES[cannedAt++ % CANNED_REPLIES.length];
         cannedLeft--;
         resolve({ status: 200, body: { replies: [{ text: reply.text, picture: reply.picture }], left: cannedLeft } });
-      }, 1100);
+      }, text.toLowerCase() === CANNED_SLOW_WORD ? 5000 : 1100);
     });
   }
 
@@ -562,7 +577,9 @@ poppy: Send */forget* and I delete everything I know about you. My WhatsApp numb
     if (withLink) {
       var p = document.createElement('div'); p.className = 'p';
       var a = document.createElement('a'); a.href = WATCH_URL; a.textContent = 'Watch Poppy being built';
-      p.appendChild(a); body.appendChild(p);
+      var again = document.createElement('button'); again.type = 'button'; again.className = 'again'; again.textContent = 'Start a new chat';
+      again.addEventListener('click', newChat);
+      p.appendChild(a); p.appendChild(again); body.appendChild(p);
     }
     liveMsg('them', body);
   }
@@ -579,8 +596,10 @@ poppy: Send */forget* and I delete everything I know about you. My WhatsApp numb
     var mine = document.createElement('div'); mine.textContent = text;
     var row = liveMsg('me', mine);
     busy(true);
-    var typingClock = setTimeout(function () { showTyping(true); }, 350);
+    var mineChat = chat;
+    typingClock = setTimeout(function () { showTyping(true); }, 350);
     (MOCK ? askCanned(text) : askServer(text)).then(function (res) {
+      if (mineChat !== chat) return; // a new chat was started while this was on its way
       clearTimeout(typingClock); showTyping(false);
       var body = res.body || {};
       if (res.status === 200 && Array.isArray(body.replies)) {
@@ -592,9 +611,32 @@ poppy: Send */forget* and I delete everything I know about you. My WhatsApp numb
       else if (res.status === 429 && body.error === 'daily_limit') shut(LINES.daily, false);
       else oops(row, text);
     }, function () {
+      if (mineChat !== chat) return;
       clearTimeout(typingClock); showTyping(false);
       oops(row, text);
-    }).then(function () { busy(false); toBottom(); });
+    }).then(function () { if (mineChat === chat) { busy(false); toBottom(); } });
+  }
+
+  // The start of a chat: the day, the grey line, the starter chips and an empty box.
+  function startChat() {
+    live.innerHTML = ''; liveLast = '';
+    liveNote('day', 'Today');
+    liveNote('sys', MOCK ? LINES.canned : LINES.demo);
+    if (returning) liveNote('sys', LINES.remembers);
+    closed = false; waiting = false;
+    say.disabled = false; say.value = ''; say.placeholder = 'Message Poppy';
+    sendBtn.disabled = false; starters.hidden = false;
+  }
+  // A new chat is a new id, and so a brand new Poppy who has never met this visitor.
+  function newChat() {
+    chat++;
+    clearTimeout(typingClock); showTyping(false);
+    if (flight) { try { flight.abort(); } catch (e) {} flight = null; }
+    freshId(); returning = false;
+    cannedLeft = CANNED_LEFT; cannedAt = 0;
+    startChat();
+    now.textContent = ukTime();
+    if (window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches) say.focus();
   }
 
   // On a phone the keyboard covers the bottom of the screen, so the phone frame is fitted to what's left above it.
@@ -613,8 +655,7 @@ poppy: Send */forget* and I delete everything I know about you. My WhatsApp numb
     app.classList.add('live'); track.classList.add('live');
     if (!started) {
       started = true;
-      liveNote('day', 'Today');
-      liveNote('sys', MOCK ? LINES.canned : LINES.demo);
+      startChat();
       STARTERS.forEach(function (text) {
         var b = document.createElement('button');
         b.type = 'button'; b.className = 'starter'; b.textContent = text;
@@ -637,6 +678,7 @@ poppy: Send */forget* and I delete everything I know about you. My WhatsApp numb
   }
   [].forEach.call(document.querySelectorAll('[data-try]'), function (b) { b.addEventListener('click', openLive); });
   document.getElementById('back').addEventListener('click', closeLive);
+  document.getElementById('fresh').addEventListener('click', newChat);
   form.addEventListener('submit', function (e) { e.preventDefault(); send(say.value); });
   if (vv) { vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit); }
   window.addEventListener('resize', fit);
