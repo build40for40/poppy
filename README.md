@@ -105,6 +105,6 @@ To see memory work without waiting half an hour, lower `IDLE_MINUTES` in `src/br
 
 ## Not done yet
 
-- A GitHub repo, CI and a deployed Worker. Nothing here has been deployed
+- A deployed Worker. CI checks every push, and the deploy workflow is manual until the Meta secrets exist
 - A permanent access token (a System User in Meta Business Manager) to replace the 24 hour one
 - Everything marked `TODO(product)`
