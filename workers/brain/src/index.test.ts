@@ -433,7 +433,7 @@ describe("ending a session", () => {
 
 describe("a play session", () => {
   const sockSorting = { activity: "Fake sock sorting", setup: "Tip out the socks.", location: "home", props: ["socks"], minutes: 45 };
-  const suggest = (play = sockSorting) => ({ content: [{ type: "text" as const, text: `Try ${play.activity}.` }, { type: "tool_use" as const, name: "start_play", input: play }] });
+  const suggest = (play = sockSorting) => ({ content: [{ type: "tool_use" as const, name: "start_play", input: { ...play, message: `Try ${play.activity}.` } }] });
   const plays = () =>
     inBrain(ALICE, (_, state) =>
       state.storage.sql
@@ -473,7 +473,7 @@ describe("a play session", () => {
   });
 
   it("saves nothing to the play log when the turn fails", async () => {
-    mockClaude({ content: [{ type: "tool_use", name: "start_play", input: sockSorting }] }, { content: [], stop_reason: "refusal" });
+    mockClaude({ content: [...suggest().content, { type: "tool_use", name: "note", input: { fact: "" } }] }, { content: [], stop_reason: "refusal" });
     await say("I need an hour, we're at home");
     await settle();
     expect(await plays()).toEqual([]);
@@ -562,7 +562,7 @@ describe("the dev tools", () => {
 
   it("skip time, so the chat ends and then the nudge goes out", async () => {
     const play = { activity: "Fake sock sorting", setup: "Tip out the socks.", location: "home", props: ["socks"], minutes: 45 };
-    mockClaude({ content: [{ type: "text", text: "Try it." }, { type: "tool_use", name: "start_play", input: play }] }, reflectionReply());
+    mockClaude({ content: [{ type: "tool_use", name: "start_play", input: { ...play, message: "Try it." } }] }, reflectionReply());
     await say("I need an hour, we're at home");
     await settle();
 
@@ -578,7 +578,7 @@ describe("the dev tools", () => {
 
 describe("a picture on a suggestion", () => {
   const play = { activity: "Fake dino bath", setup: "Fill a bowl.", location: "home", props: ["dinosaurs"], minutes: 20 };
-  const suggest = (picture: string, picture_brief = "") => ({ content: [{ type: "text" as const, text: "Try a dino bath." }, { type: "tool_use" as const, name: "start_play", input: { ...play, picture, picture_brief } }] });
+  const suggest = (picture: string, picture_brief = "") => ({ content: [{ type: "tool_use" as const, name: "start_play", input: { ...play, message: "Try a dino bath.", picture, picture_brief } }] });
   const images = () => graph.requests.filter((r) => r.type === "image");
 
   it("lists the pictures in the context and sends the chosen one with the reply as its caption", async () => {

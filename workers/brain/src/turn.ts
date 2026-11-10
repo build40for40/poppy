@@ -53,7 +53,7 @@ export async function runTurn({ client, model, context, messages: history, playO
   const state: ToolState = { facts, plays: [], playOpen };
   const usage: TurnOutcome["usage"] = [];
   const said: string[] = [];
-  const outcome = (rounds: number): TurnOutcome => ({ messages, turns, facts, plays: state.plays, text: said.join("\n\n"), timings: { total_ms: Date.now() - started, rounds }, usage });
+  const outcome = (rounds: number): TurnOutcome => ({ messages, turns, facts, plays: state.plays, text: state.suggestion ?? said.join("\n\n"), timings: { total_ms: Date.now() - started, rounds }, usage });
 
   for (let round = 1; round <= MAX_ROUNDS; round++) {
     const message = await client.messages.stream(liveRequest(model, context, messages)).finalMessage();
@@ -74,15 +74,16 @@ export async function runTurn({ client, model, context, messages: history, playO
 
     const recorded: ToolCall[] = [];
     const results = toolUses.map((use) => runTool(use, state, recorded));
-    turns.push({ role: "assistant", at: now(), ...(text ? { text } : {}), ...(recorded.length ? { tool_calls: recorded } : {}) });
+    const suggested = recorded.some((call) => call.name === "start_play");
+    const shown = suggested ? state.suggestion : text;
+    turns.push({ role: "assistant", at: now(), ...(shown ? { text: shown } : {}), ...(recorded.length ? { tool_calls: recorded } : {}) });
 
     if (!results.length) return outcome(round);
     // Every tool_use needs its result in the very next user message, all together.
     messages.push({ role: "user", content: results.map((r): Anthropic.ToolResultBlockParam => ({ type: "tool_result", ...r })) });
     if (message.stop_reason !== "tool_use") return outcome(round);
-    // A suggestion is the whole reply. Asked to carry on after it, Claude signs off a second time.
-    const suggested = text && recorded.some((call) => call.name === "start_play") && results.every((r) => !r.is_error);
-    if (suggested) return outcome(round);
+    // The suggestion is the whole reply. Asked to carry on after it, Claude signs off a second time.
+    if (suggested && results.every((r) => !r.is_error)) return outcome(round);
   }
   throw new TurnError(`Still calling tools after ${MAX_ROUNDS} rounds.`);
 }
@@ -91,6 +92,8 @@ interface ToolState {
   facts: string[];
   plays: PlayEvent[];
   playOpen: boolean;
+  /** The message of the suggestion made this turn, which is sent in place of anything written around the tool call. */
+  suggestion?: string;
 }
 
 /** Runs one tool call here in the Durable Object. A bad call goes back to Claude as an error result, so it can try again. */
@@ -108,8 +111,10 @@ function runTool(use: Anthropic.ToolUseBlock, state: ToolState, recorded: ToolCa
     if (typeof play === "string") return failed(play);
     state.plays.push({ type: "start", play });
     state.playOpen = true;
-    recorded.push({ id: use.id, name: "start_play", input: { ...play } });
-    return { tool_use_id: use.id, content: "saved, waiting for their check-in" };
+    state.suggestion = play.message;
+    const { message: _, ...details } = play;
+    recorded.push({ id: use.id, name: "start_play", input: details });
+    return { tool_use_id: use.id, content: "sent to the parent, waiting for their check-in" };
   }
   if (use.name === "check_in") {
     if (!state.playOpen) return failed("No play session is waiting for a check-in.");
