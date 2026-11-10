@@ -1,4 +1,4 @@
-import { safeEqual, splitMessage, WhatsAppError, type Incoming } from "./whatsapp";
+import { MAX_CAPTION_CHARS, safeEqual, splitMessage, WhatsAppError, type Incoming } from "./whatsapp";
 
 /** Twilio's limit for the body of one outgoing message. */
 export const TWILIO_MAX_CHARS = 1600;
@@ -88,14 +88,23 @@ export function emptyTwiml(): Response {
 
 export const twilioMessagesUrl = (accountSid: string) => `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
 
-/** Sends a text reply through Twilio's Messages API, as several messages if it's longer than one can hold. */
-export async function sendTwilioText(config: TwilioConfig, toPhone: string, text: string): Promise<void> {
-  for (const [index, body] of splitMessage(text, TWILIO_MAX_CHARS).entries()) {
+/**
+ * Sends a reply through Twilio's Messages API, as several messages if it's longer than one can hold. With a picture URL,
+ * the picture goes first, with the reply as its caption when it fits. Twilio fetches the picture from the URL itself.
+ */
+export async function sendTwilioText(config: TwilioConfig, toPhone: string, text: string, picture?: string): Promise<void> {
+  const messages: Record<string, string>[] = [];
+  if (picture && text.length <= MAX_CAPTION_CHARS) messages.push({ Body: text, MediaUrl: picture });
+  else {
+    if (picture) messages.push({ MediaUrl: picture });
+    messages.push(...splitMessage(text, TWILIO_MAX_CHARS).map((body) => ({ Body: body })));
+  }
+  for (const [index, fields] of messages.entries()) {
     if (index && config.gapMs) await new Promise((resolve) => setTimeout(resolve, config.gapMs));
     const response = await fetch(twilioMessagesUrl(config.accountSid), {
       method: "POST",
       headers: { Authorization: `Basic ${btoa(`${config.accountSid}:${config.authToken}`)}`, "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ From: config.from, To: `whatsapp:+${toPhone}`, Body: body }).toString(),
+      body: new URLSearchParams({ From: config.from, To: `whatsapp:+${toPhone}`, ...fields }).toString(),
     });
     if (response.ok) {
       await response.body?.cancel();

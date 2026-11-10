@@ -24,6 +24,7 @@ Shared 40 for 40 context lives in `../AGENTS.md`.
 - About the child, Poppy keeps age, boy or girl, a nickname and whatever else helps pick activities. No surname, address or school.
 - Poppy confirms where the family is before suggesting, suggests one activity, then stops.
 - Poppy messages first exactly once per play session: a check-in nudge an hour after the activity was meant to end, if nobody has said how it went.
+- Every suggestion goes out with a picture. Poppy picks from a set of pictures, starting with thirty hand-drawn ones. When none fits, a new one is drawn in the background, used from the next time on, and joins the set without anyone approving it first.
 
 ## Still open
 

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.4.0",
+    "@cf-wasm/resvg": "^0.4.0",
     "@cfworker/json-schema": "^4.1.6"
   },
   "devDependencies": {

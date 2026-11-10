@@ -1,3 +1,4 @@
+import type { PictureEntry } from "./pictures";
 import type { Preferences } from "./profile";
 
 export const MEMORY_MD = "MEMORY.md";
@@ -21,6 +22,8 @@ export interface ContextSources {
   openPlay: string | null;
   /** Notes from earlier conversations, newest first. */
   sessionNotes: Note[];
+  /** Every picture there is to put on a suggestion. */
+  pictures: PictureEntry[];
   /** The London time the session started, like "14:05". */
   time: string;
   /** The London day the session started, like "10 November 2026". A session never runs past midnight, so this stays true. */
@@ -68,9 +71,11 @@ Tell me how it goes, or ask for something different.
 - One line on what it builds and why it suits this child right now: their interests, where they are, what the parent is trying to get done. Never a generic line about learning.
 - A short safety line only when the activity has something to watch, like water.
 - One short closing line inviting them to say how it goes or ask for something else.
-- The whole thing fits on one phone screen.
+- The whole thing fits on one phone screen, under 900 characters, because it's sent as the caption under a picture.
 
 Call start_play in the same reply, then stop. They're busy.
+
+A picture of the activity is sent on top of your suggestion. In start_play, choose the one from Pictures below that best shows this activity: the same kind of play and the same main things. If none is close, leave picture empty and say in picture_brief what a new one should show, in general words with no names or details about this family, because every family sees the pictures. A new one is drawn for next time. Never mention the picture in your reply.
 
 If they want something different, suggest another in the same shape and call start_play again. If they're missing something, swap in a thing they do have instead of starting over, and save what the family has or hasn't got with note so later suggestions fit their house.
 
@@ -125,10 +130,10 @@ When the parent asks what the child has been doing, what they've tried, or what 
 
 # What you know
 
-Below is what you know about this family: their profile (USER.md), the child's interests (interests.md), lessons you've kept (MEMORY.md), the play log with how each activity went, and your notes on your last few conversations. Use it naturally, like someone who remembers, without reciting it.`;
+Below is what you know about this family: their profile (USER.md), the child's interests (interests.md), lessons you've kept (MEMORY.md), the play log with how each activity went, and your notes on your last few conversations. Use it naturally, like someone who remembers, without reciting it. After it comes the list of pictures you can put on a suggestion.`;
 
 /** Everything Claude knows going into a session. Built once and stored on the session, so every turn sends the same bytes and the prompt cache holds. */
-export function assembleContext({ user, interests, memory, plays, openPlay, sessionNotes, time, today }: ContextSources): string {
+export function assembleContext({ user, interests, memory, plays, openPlay, sessionNotes, pictures, time, today }: ContextSources): string {
   const sections = [
     section("USER.md", [`Preferences: ${JSON.stringify(user.preferences)}`, user.about.trim()].filter(Boolean).join("\n\n")),
     section("interests.md", interests?.trim() || "Nothing yet."),
@@ -137,6 +142,7 @@ export function assembleContext({ user, interests, memory, plays, openPlay, sess
     section("Waiting for a check-in", openPlay ? `${openPlay} is still open: the parent hasn't said how it went.` : "Nothing."),
     section("Your last conversations, newest first", sessionNotes.length ? sessionNotes.map(renderNote).join("\n\n") : "None yet: this is the first time you've talked."),
     section("This conversation", `It started at ${time} on ${today}, UK time.`),
+    section("Pictures", pictures.map((p) => `- ${p.id}: ${p.about}`).join("\n") || "None yet."),
   ];
   return sections.join("\n\n");
 }

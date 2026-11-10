@@ -10,7 +10,9 @@
     // "true" replies with the user's own text and never calls Claude. Set it in .dev.vars to test the WhatsApp round trip.
     "ECHO_MODE": "",
     // Only for Twilio behind a tunnel: the tunnel's address, so the signature check knows the URL Twilio called.
-    "PUBLIC_BASE_URL": ""
+    "PUBLIC_BASE_URL": "",
+    // Where Twilio and Meta fetch the picture on a suggestion. They fetch it themselves, so it has to be public.
+    "PICTURES_BASE_URL": "https://build40for40.com/poppy/api/pictures"
   },
   // Secrets, set with `wrangler secret put` or the deploy workflow, and in .dev.vars locally:
   //   ANTHROPIC_API_KEY
@@ -20,9 +22,15 @@
   // secrets can be required, and a list would stop `wrangler dev` loading the unlisted ones from .dev.vars. A route answers
   // 503 until its own are set. They're typed in src/env.d.ts.
   "durable_objects": {
-    "bindings": [{ "name": "USER_BRAIN", "class_name": "UserBrain" }]
+    "bindings": [
+      { "name": "USER_BRAIN", "class_name": "UserBrain" },
+      { "name": "PICTURE_SHELF", "class_name": "PictureShelf" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UserBrain"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["UserBrain"] },
+    { "tag": "v2", "new_sqlite_classes": ["PictureShelf"] }
+  ],
   "routes": [
     { "pattern": "build40for40.com/poppy/api", "zone_name": "build40for40.com" },
     { "pattern": "build40for40.com/poppy/api/*", "zone_name": "build40for40.com" }

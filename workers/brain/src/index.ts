@@ -1,10 +1,13 @@
 import { BASE_PATH, error, HttpError, readText } from "./http";
+import { PICTURE_ID, renderPng, starterPicture, type Picture } from "./pictures";
+import { shelfOf } from "./shelf";
 import { emptyTwiml, incomingTwilioMessage, signedUrlCandidates, twilioSenders, verifyTwilioSignature } from "./twilio";
 import { brainName, incomingMessages, safeEqual, verifySignature, type Incoming } from "./whatsapp";
 
 import type { UserBrain } from "./brain";
 
 export { UserBrain } from "./brain";
+export { PictureShelf } from "./shelf";
 
 /** Meta batches up to 1,000 updates into one POST. */
 const MAX_WEBHOOK_BYTES = 3 * 1024 * 1024;
@@ -12,6 +15,7 @@ const MAX_WEBHOOK_BYTES = 3 * 1024 * 1024;
 const MAX_TWILIO_BYTES = 64 * 1024;
 const WEBHOOK_PATH = `${BASE_PATH}/whatsapp`;
 const TWILIO_PATH = `${BASE_PATH}/twilio`;
+const PICTURES_PATH = `${BASE_PATH}/pictures/`;
 
 // The generated stub types recurse too deeply on JSON, so the stub is typed from the class directly.
 type Rpc<T> = { [K in keyof T]: T[K] extends (...args: infer A) => infer R ? (...args: A) => Promise<Awaited<R>> : never };
@@ -20,6 +24,10 @@ type Brain = Rpc<Pick<UserBrain, "receive">>;
 export default {
   async fetch(request, env): Promise<Response> {
     const { pathname, searchParams } = new URL(request.url);
+    if (pathname.startsWith(PICTURES_PATH)) {
+      if (request.method !== "GET" && request.method !== "HEAD") return error(405, "method_not_allowed", undefined, { Allow: "GET, HEAD" });
+      return picture(request, pathname.slice(PICTURES_PATH.length), env);
+    }
     if (pathname !== WEBHOOK_PATH && pathname !== TWILIO_PATH) return error(404, "not_found");
     try {
       if (pathname === TWILIO_PATH) {
@@ -84,6 +92,25 @@ async function twilioWebhook(request: Request, env: Env): Promise<Response> {
   const message = incomingTwilioMessage(params, { accountSid: env.TWILIO_ACCOUNT_SID, senders: twilioSenders(env.TWILIO_WHATSAPP_FROM) });
   if (message) await deliver(message, env);
   return emptyTwiml();
+}
+
+/**
+ * A picture as a PNG, for Twilio or Meta to fetch and put on a suggestion. It's drawn from the SVG on the first fetch and
+ * kept in the edge cache after that. Pictures hold no one's data, so anyone may fetch them.
+ */
+async function picture(request: Request, file: string, env: Env): Promise<Response> {
+  const id = file.match(/^(.+)\.png$/)?.[1] ?? "";
+  if (!PICTURE_ID.test(id)) return error(404, "not_found");
+  const cacheKey = new Request(new URL(request.url).toString(), { method: "GET" });
+  const cached = await caches.default.match(cacheKey);
+  if (cached) return request.method === "HEAD" ? new Response(null, cached) : cached;
+
+  const found: Picture | null = starterPicture(id) ?? (await shelfOf(env).get(id));
+  if (!found) return error(404, "not_found");
+  const png = await renderPng(found);
+  const response = new Response(png, { headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=86400" } });
+  await caches.default.put(cacheKey, response.clone());
+  return request.method === "HEAD" ? new Response(null, response) : response;
 }
 
 async function deliver(message: Incoming, env: Env): Promise<void> {

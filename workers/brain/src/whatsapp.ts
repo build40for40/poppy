@@ -2,6 +2,8 @@ import { isPlainObject } from "./http";
 
 /** WhatsApp's limit for one text message body. */
 export const MAX_MESSAGE_CHARS = 4096;
+/** WhatsApp's limit for the caption under a picture. A longer reply goes as the picture on its own, then the text. */
+export const MAX_CAPTION_CHARS = 1024;
 /** Longer incoming text is cut here. WhatsApp itself stops at 4,096, so this only guards against a malformed payload. */
 const MAX_INCOMING_CHARS = 8192;
 const MAX_ID_CHARS = 256;
@@ -137,9 +139,18 @@ export class WhatsAppError extends Error {
   }
 }
 
-/** Sends a text reply through the Cloud API, as several messages if it's longer than one can hold. */
-export async function sendText(config: WhatsAppConfig, to: Address, text: string): Promise<void> {
+/**
+ * Sends a reply through the Cloud API, as several messages if it's longer than one can hold. With a picture URL, the
+ * picture goes first, with the reply as its caption when it fits. Meta fetches the picture from the URL itself.
+ */
+export async function sendText(config: WhatsAppConfig, to: Address, text: string, picture?: string): Promise<void> {
   const recipient = to.phone ? { to: to.phone } : { recipient: to.userId };
+  const base = { messaging_product: "whatsapp", recipient_type: "individual", ...recipient };
+  if (picture) {
+    const captioned = text.length <= MAX_CAPTION_CHARS;
+    await post(config, { ...base, type: "image", image: { link: picture, ...(captioned ? { caption: text } : {}) } });
+    if (captioned) return;
+  }
   for (const body of splitMessage(text)) {
     await post(config, { messaging_product: "whatsapp", recipient_type: "individual", ...recipient, type: "text", text: { preview_url: false, body } });
   }
