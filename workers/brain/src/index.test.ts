@@ -3,6 +3,7 @@ import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IDLE_MINUTES, REFLECTION_RETRY_MINUTES, REPLIES, TURN_CAP, type UserBrain } from "./brain";
 import { BASE_PATH } from "./http";
+import { NUDGE_AFTER_MINUTES } from "./plays";
 import { LIVE_PROMPT } from "./prompt";
 import { SCHEMA_VERSION } from "./schema";
 import { brainFor, fakeMessage as rawMessage, fakePerson, fakeReflection, fakeWebhook, mockClaude, mockGraph, postWebhook, sayAs, sentTexts, type FakeMessage, type GraphMock } from "./testing";
@@ -319,7 +320,7 @@ describe("ending a session", () => {
       expect(session).toMatchObject({ end_reason: "idle", reflection_status: "done", reflection: { summary: "Asked about fake things. Ended happy.", preferences: ["Prefers short answers"] } });
       expect(session.reflection!.note).toMatch(/^sessions\/\d{4}-\d{2}-\d{2}-[0-9a-f]{8}\.md$/);
       expect(brain.getProfile().learned).toEqual(["Prefers short answers"]);
-      expect(state.storage.sql.exec("SELECT path FROM files ORDER BY path").toArray().map((r) => r.path)).toEqual(["USER.md", session.reflection!.note]);
+      expect(state.storage.sql.exec("SELECT path FROM files ORDER BY path").toArray().map((r) => r.path)).toEqual(["USER.md", "interests.md", session.reflection!.note]);
       // Nothing is left to wait for, so the alarm isn't set again.
       expect(await state.storage.getAlarm()).toBeNull();
     });
@@ -405,6 +406,91 @@ describe("ending a session", () => {
       expect(await state.storage.getAlarm()).toBeNull();
     });
     expect(claude.requests).toHaveLength(2);
+  });
+});
+
+describe("a play session", () => {
+  const sockSorting = { activity: "Fake sock sorting", setup: "Tip out the socks.", location: "home", props: ["socks"], minutes: 45 };
+  const suggest = (play = sockSorting) => ({ content: [{ type: "text" as const, text: `Try ${play.activity}.` }, { type: "tool_use" as const, name: "start_play", input: play }] });
+  const plays = () =>
+    inBrain(ALICE, (_, state) =>
+      state.storage.sql
+        .exec<{ frontmatter: string; body: string }>("SELECT frontmatter, body FROM files WHERE kind = 'play' ORDER BY json_extract(frontmatter, '$.started_at'), path")
+        .toArray()
+        .map((r) => ({ ...JSON.parse(r.frontmatter), body: r.body })),
+    );
+  const endChat = async () => {
+    await inBrain(ALICE, (_, state) => void state.storage.sql.exec("UPDATE sessions SET last_message_at = ? WHERE ended_at IS NULL", minutesAgo(IDLE_MINUTES + 1)));
+    await runDurableObjectAlarm(await brainFor(ALICE));
+  };
+  const startedAgo = (minutes: number) => inBrain(ALICE, (_, state) => void state.storage.sql.exec("UPDATE files SET frontmatter = json_set(frontmatter, '$.started_at', ?) WHERE kind = 'play'", minutesAgo(minutes)));
+
+  it("opens when an activity is suggested and waits past the end of the chat for a check-in", async () => {
+    const claude = mockClaude(suggest(), text("Have fun."), reflectionReply(), { content: [{ type: "tool_use", name: "check_in", input: { went: "loved", minutes: 50, feedback: "Sorted every sock twice." } }] }, text("Brilliant."));
+    await say("I need an hour, we're at home");
+    await settle();
+    expect(await plays()).toMatchObject([{ activity: "Fake sock sorting", location: "home", props: ["socks"], planned_minutes: 45, status: "open", body: "# Fake sock sorting\n\nTip out the socks.\n" }]);
+
+    await endChat();
+    await say("That went brilliantly, nearly an hour");
+    await settle();
+
+    const context = claude.requests[3].system[1].text as string;
+    expect(context).toContain("# Fake sock sorting");
+    expect(context).toMatch(/# Waiting for a check-in\n\nplays\/\d{4}-\d{2}-\d{2}-[0-9a-f]{8}\.md is still open/);
+    expect(await plays()).toMatchObject([{ status: "done", went: "loved", minutes: 50, body: "# Fake sock sorting\n\nTip out the socks.\n\n## How it went\n\nSorted every sock twice.\n" }]);
+  });
+
+  it("drops a suggestion that was turned down in the same chat", async () => {
+    mockClaude(suggest(), text("Have fun."), suggest({ ...sockSorting, activity: "Fake cushion mountain" }), text("Have fun."));
+    await say("I need an hour, we're at home");
+    await settle();
+    await say("Something else?");
+    await settle();
+    expect((await plays()).map((p) => [p.activity, p.status])).toEqual([["Fake cushion mountain", "open"]]);
+  });
+
+  it("saves nothing to the play log when the turn fails", async () => {
+    mockClaude(suggest(), { content: [], stop_reason: "refusal" });
+    await say("I need an hour, we're at home");
+    await settle();
+    expect(await plays()).toEqual([]);
+  });
+
+  it("asks once how it went, a while after the activity was meant to end", async () => {
+    mockClaude(suggest(), text("Have fun."), reflectionReply());
+    await say("I need an hour, we're at home");
+    await settle();
+    await endChat();
+    const alarm = await inBrain(ALICE, (_, state) => state.storage.getAlarm());
+    expect(alarm).toBeGreaterThan(Date.now() + (sockSorting.minutes + NUDGE_AFTER_MINUTES - 1) * 60_000);
+    expect(alarm).toBeLessThanOrEqual(Date.now() + (sockSorting.minutes + NUDGE_AFTER_MINUTES) * 60_000);
+    expect(sentTexts(graph)).toHaveLength(1);
+
+    await startedAgo(sockSorting.minutes + NUDGE_AFTER_MINUTES + 1);
+    await runDurableObjectAlarm(await brainFor(ALICE));
+    await runDurableObjectAlarm(await brainFor(ALICE));
+
+    expect(sentTexts(graph).map((r) => r.text.body)).toEqual(["Try Fake sock sorting.\n\nHave fun.", REPLIES.nudge("Fake sock sorting")]);
+    expect((await plays())[0]).toMatchObject({ status: "open", nudged_at: expect.any(String) });
+    expect(await inBrain(ALICE, (_, state) => state.storage.getAlarm())).toBeNull();
+  });
+
+  it("doesn't ask when the parent has already checked in, or while they're still chatting", async () => {
+    mockClaude(suggest(), text("Have fun."), { content: [{ type: "tool_use", name: "check_in", input: { went: "flop", minutes: 5, feedback: "Wandered off." } }] }, text("Noted."), suggest());
+    await say("I need an hour, we're at home");
+    await settle();
+    await say("That was over in five minutes");
+    await settle();
+    await startedAgo(sockSorting.minutes + NUDGE_AFTER_MINUTES + 1);
+    await runDurableObjectAlarm(await brainFor(ALICE));
+
+    await say("Another one please");
+    await settle();
+    await startedAgo(sockSorting.minutes + NUDGE_AFTER_MINUTES + 1);
+    await runDurableObjectAlarm(await brainFor(ALICE));
+
+    expect(sentTexts(graph).map((r) => r.text.body)).not.toContain(REPLIES.nudge("Fake sock sorting"));
   });
 });
 

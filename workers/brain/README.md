@@ -2,7 +2,7 @@
 
 A Cloudflare Worker in front of one `UserBrain` Durable Object per person, each with its own SQLite. The Worker takes Meta's WhatsApp webhook. The Durable Object holds what the assistant knows about that person, talks to Claude and sends the replies.
 
-It's the Sous brain (Day 5) with the cooking removed and WhatsApp put where the phone app was. Product decisions haven't been made, and every place that waits on one is marked `TODO(product)`.
+It's the Sous brain (Day 5) with the cooking removed and WhatsApp put where the phone app was. Poppy suggests play activities to parents of small children and remembers how each one went.
 
 ## Routes
 
@@ -34,16 +34,27 @@ A chat has no end button, so the brain decides when a conversation is over. One 
 - it reaches `TURN_CAP` (40) user turns, or
 - the London day it started on is over.
 
-Both constants are in `src/brain.ts`. Sessions matter because the context is assembled once, when a session starts: `USER.md`, `MEMORY.md`, the five newest session notes and the London date (`src/prompt.ts`). It's stored on the session row with the model, so every turn sends a byte-identical prefix and the prompt cache holds. What a session learns reaches the next session, not the current one.
+Both constants are in `src/brain.ts`. Sessions matter because the context is assembled once, when a session starts: `USER.md`, `interests.md`, `MEMORY.md`, the ten newest play sessions, the play session waiting for a check-in, the five newest session notes and the London time and date (`src/prompt.ts`). It's stored on the session row with the model, so every turn sends a byte-identical prefix and the prompt cache holds. What a session learns reaches the next session, not the current one.
 
-Each turn sends Claude the tools, then the prompt and the context (cached with a breakpoint), then the conversation (top-level automatic caching), on Sonnet 5.5 at `low` effort with thinking `between_tools`. The only tool is `note(fact)`, which runs in the Durable Object: the fact is saved on the session and Claude carries on. An empty reply isn't stored (the API rejects an empty assistant message), so the person's next words join their still-open message. Every turn logs a `brain_turn` line with timings and token usage, including cache reads.
+Each turn sends Claude the tools, then the prompt and the context (cached with a breakpoint), then the conversation (top-level automatic caching), on Sonnet 5.5 at `low` effort with thinking `between_tools`. The tools are `note(fact)`, `start_play` and `check_in`. They all run in the Durable Object and Claude carries on in the same turn. What they recorded is saved with the turn, in one transaction, so a turn that fails leaves nothing behind. An empty reply isn't stored (the API rejects an empty assistant message), so the person's next words join their still-open message. Every turn logs a `brain_turn` line with timings and token usage, including cache reads.
+
+## Play sessions
+
+A chat and a play session are different things. Mum asks at 14:00, the child plays for an hour and she checks in at 15:05, long after the 30 minute chat has ended. So a play session is its own note, `plays/<London date>-<id prefix>.md`, and it outlives the chat it started in (`src/plays.ts`).
+
+- **`start_play`** is called in the same reply as the suggestion, with the activity, the set-up, the location, the props and how long it's meant to last. It writes the note with `status: open`.
+- **Only one is open at a time.** A second `start_play` in the same chat means the first suggestion was turned down, so that note is deleted. One left open by an earlier chat is closed as `no_check_in`.
+- **`check_in`** closes the open play session with `went` (`loved`, `fine` or `flop`), how many minutes it lasted when the parent said, and their feedback under `## How it went`. With nothing open it goes back to Claude as an error.
+- **Every new chat is told** which play session is still waiting, so a check-in that arrives hours later lands on the right one.
+- **The nudge.** If a play session is still open `NUDGE_AFTER_MINUTES` (60) after it was meant to end, the alarm sends one message asking how it went and stamps `nudged_at` on the note. It's sent once, never while a chat is open, and it's always inside WhatsApp's 24 hour window because the parent wrote at most four hours earlier.
 
 ## Reflection
 
-When a session ends, the alarm reflects on it: one `claude-opus-5-5` call (`src/reflection.ts`, effort `high`, structured output against `reflectionSchema`) reads `USER.md`, the transcript and the noted facts, and returns a `summary` and `preferences` (new, lasting facts about the person). Code checks the output against the schema, tidies it and writes the vault in one transaction (`src/vault.ts`):
+When a session ends, the alarm reflects on it: one `claude-opus-5-5` call (`src/reflection.ts`, effort `high`, structured output against `reflectionSchema`) reads `USER.md`, `interests.md`, the transcript and the noted facts, and returns a `summary`, `preferences` (new, lasting facts about the child and the family) and `interests` (what the child is into, or isn't). Code checks the output against the schema, tidies it and writes the vault in one transaction (`src/vault.ts`):
 
 - `sessions/<London date>-<id prefix>.md`: the summary and what was learned.
 - `USER.md`: the new facts under `## Learned in conversation`, skipping ones already there. The person's own text above it is never touched.
+- `interests.md`: the new interests under `## What they're into`, the same way. It's one running note, created the first time there's something to put in it.
 
 Every line a session adds carries that session's `[[wikilink]]`, and a rerun replaces that session's lines, so reflecting twice changes nothing. After writing, the `links` table is thrown away and rebuilt from every note's wikilinks.
 
@@ -51,7 +62,7 @@ If Claude is down or rate limited, the reflection is tried again after 1, 5, 30 
 
 ## The alarm
 
-A Durable Object has one alarm, so it does everything in order: answer the inbox, end sessions that are due, reflect on ended sessions, answer anything that arrived meanwhile, then set itself for whichever comes first out of the open session's idle deadline, London midnight and the next reflection retry. A new message always sets it to now.
+A Durable Object has one alarm, so it does everything in order: answer the inbox, end sessions that are due, reflect on ended sessions, send the check-in nudge if it's due, answer anything that arrived meanwhile, then set itself for whichever comes first out of the open session's idle deadline, London midnight, the next reflection retry and the nudge. A new message always sets it to now.
 
 One thing to know: a message that arrives while a reflection is running waits for it to finish. The upside is that the new session's context then includes what the last one learned.
 
@@ -64,7 +75,8 @@ One thing to know: a message that arrives while a reflection is running waits fo
 - One person, one Durable Object. Nothing is shared between people and nothing goes to the site's D1.
 - Phone numbers, message text, prompts and vault content are never logged. Log lines carry event names, session ids, timings, token usage and Meta's error codes.
 - The hash in the object name keeps numbers out of names and logs. It isn't encryption: the number is stored inside the object, and `/forget` is what deletes it.
-- Message text reaches the prompt and, through reflection, the vault. The prompts treat it as what the person said and never as instructions, and the reflection only has two narrow fields. Keep both true as the product grows.
+- Message text reaches the prompt and, through reflection, the vault. The prompts treat it as what the person said and never as instructions, and the reflection only has three narrow fields. Keep both true as the product grows.
+- This is data about a child. Poppy keeps age, boy or girl, a nickname and what helps pick activities. The prompts tell her not to ask for or record a surname, an address or a school.
 - Fixtures are fake: the phone numbers are from Ofcom's range reserved for TV drama, and no real conversation is ever pasted into a test.
 
 ## Configuration
@@ -91,17 +103,8 @@ For local runs they go in `.dev.vars` (copy `.dev.vars.example`). The root READM
 | `src/brain.ts` | The Durable Object: inbox, turns, sessions, reflection, the alarm, wipe |
 | `src/turn.ts` | One live turn with Claude, running tools here |
 | `src/claude.ts`, `src/tools.ts`, `src/prompt.ts` | The request shape, the tool list, the prompt and context |
+| `src/plays.ts` | Play sessions: checking the tool calls, the notes, the one open session, when to nudge |
 | `src/reflection.ts` | The reflection schema, prompt, call and retry rules |
 | `src/vault.ts`, `src/wikilinks.ts` | Notes, sections, links, London dates |
 | `src/schema.ts`, `src/seed.ts` | Migrations and the starter `USER.md` |
 | `src/testing.ts` | Fake Claude, fake WhatsApp, fake people and signed fake webhooks |
-
-## What to fill in for the product
-
-Search for `TODO(product)`. In short:
-
-- `src/prompt.ts`: who the assistant is and how it sounds
-- `src/tools.ts` and `runTool` in `src/turn.ts`: the tools it needs
-- `src/reflection.ts`: what's worth remembering, as schema fields
-- `src/vault.ts`, `src/wikilinks.ts` and `src/schema.ts`: the notes those fields are filed into
-- `src/brain.ts`: `IDLE_MINUTES`, `TURN_CAP` and the canned replies

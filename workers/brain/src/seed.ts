@@ -1,10 +1,8 @@
 import type { Preferences } from "./profile";
 
-// TODO(product): the preferences every new user starts with, if the product has any.
 export const starterPreferences: Preferences = {};
 
-// TODO(product): rewrite once the assistant has a name and a job.
-export const starterAbout = `# About me
+export const starterAbout = `# About this family
 
-Nothing here yet. This fills in as we talk.
+Nothing here yet. Poppy fills this in as she learns about the child and the family.
 `;

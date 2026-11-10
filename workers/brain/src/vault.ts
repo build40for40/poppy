@@ -3,8 +3,7 @@ import { USER_MD } from "./profile";
 import type { Reflection } from "./reflection";
 import { linkKind, parseWikilinks, wikilink } from "./wikilinks";
 
-// TODO(product): add the product's note kinds here, in `files.kind` (schema.ts) and in the folder map (wikilinks.ts).
-export type NoteKind = "user" | "memory" | "session";
+export type NoteKind = "user" | "memory" | "session" | "interests" | "play";
 
 type Frontmatter = { [key: string]: JsonValue };
 
@@ -23,7 +22,13 @@ export interface ReflectedSession {
 /** The heading in USER.md that the reflection writes under. The user's own text sits outside it and is never touched. */
 export const LEARNED = "Learned in conversation";
 
+export const INTERESTS_MD = "interests.md";
+/** The heading in interests.md that the reflection writes under. */
+export const INTERESTS = "What they're into";
+const INTERESTS_START = "# Interests\n";
+
 export const londonDate = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date(iso));
+export const londonTime = (iso: string) => new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso));
 export const londonDay = (iso: string) => new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", day: "numeric", month: "long", year: "numeric" }).format(new Date(iso));
 
 /** When the London day that `iso` falls in ends. It can be an hour out on the two days the clocks change, so callers compare dates as well. */
@@ -61,7 +66,6 @@ export const addLines = (lines: string[]) => (current: string[]) => [...new Set(
 /**
  * Writes everything one reflection learned into the vault, then rebuilds the links. Running it again with the same input changes nothing:
  * every line a session adds carries that session's [[wikilink]], and a rerun replaces that session's lines.
- * TODO(product): file the product's own reflection fields into topic notes here, each line carrying `sessionLink`.
  */
 export function writeReflection(sql: SqlStorage, session: ReflectedSession, now: string): string {
   const { reflection } = session;
@@ -72,13 +76,13 @@ export function writeReflection(sql: SqlStorage, session: ReflectedSession, now:
 
   const user = readFile(sql, USER_MD);
   if (user) {
-    const body = editSection(user.body, LEARNED, (current) => {
-      const others = current.filter((l) => !l.includes(sessionLink));
-      const known = new Set(others.map(preferenceText));
-      const added = reflection.preferences.filter((p) => !known.has(p.toLowerCase())).map((p) => `- ${p} (${sessionLink})`);
-      return [...others, ...added];
-    });
-    writeFile(sql, USER_MD, "user", user.frontmatter, body, now);
+    writeFile(sql, USER_MD, "user", user.frontmatter, editSection(user.body, LEARNED, sessionEntries(sessionLink, reflection.preferences)), now);
+  }
+
+  const interests = readFile(sql, INTERESTS_MD);
+  if (interests || reflection.interests.length) {
+    const body = editSection(interests?.body ?? INTERESTS_START, INTERESTS, sessionEntries(sessionLink, reflection.interests));
+    writeFile(sql, INTERESTS_MD, "interests", interests?.frontmatter ?? {}, body, now);
   }
 
   rebuildLinks(sql);
@@ -95,9 +99,18 @@ export function rebuildLinks(sql: SqlStorage): void {
   }
 }
 
+/** Swaps one session's entries for new ones, skipping any that another session already left. */
+function sessionEntries(sessionLink: string, entries: string[]) {
+  return (current: string[]) => {
+    const others = current.filter((l) => !l.includes(sessionLink));
+    const known = new Set(others.map(preferenceText));
+    return [...others, ...entries.filter((e) => !known.has(e.toLowerCase())).map((e) => `- ${e} (${sessionLink})`)];
+  };
+}
+
 function sessionBody({ started_at, reflection }: ReflectedSession): string {
-  const learned = reflection.preferences.map((p) => `- ${p}`).join("\n");
-  return [`# Conversation, ${londonDay(started_at)}`, reflection.summary, learned ? `## Learned about them\n\n${learned}` : ""].filter(Boolean).join("\n\n").concat("\n");
+  const list = (heading: string, items: string[]) => (items.length ? `## ${heading}\n\n${items.map((i) => `- ${i}`).join("\n")}` : "");
+  return [`# Conversation, ${londonDay(started_at)}`, reflection.summary, list("Learned about them", reflection.preferences), list(INTERESTS, reflection.interests)].filter(Boolean).join("\n\n").concat("\n");
 }
 
 function entryText(line: string): string {

@@ -9,13 +9,16 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function run(...replies: Parameters<typeof mockClaude>) {
+const run = (...replies: Parameters<typeof mockClaude>) => runWith({}, ...replies);
+
+function runWith({ playOpen = false }: { playOpen?: boolean }, ...replies: Parameters<typeof mockClaude>) {
   const claude = mockClaude(...replies);
   const outcome = runTurn({
     client: createClient(env.ANTHROPIC_API_KEY),
     model: "claude-sonnet-5-5",
     context: "context",
     messages: [{ role: "user", content: [{ type: "text", text: "Hello there." }] }],
+    playOpen,
     now: () => "2026-11-10T18:00:00Z",
   });
   return { claude, outcome };
@@ -28,7 +31,11 @@ describe("liveRequest", () => {
       { type: "text", text: LIVE_PROMPT },
       { type: "text", text: "the context", cache_control: { type: "ephemeral" } },
     ]);
-    expect(request.tools).toMatchObject([{ name: "note", strict: true }]);
+    expect(request.tools).toMatchObject([
+      { name: "note", strict: true },
+      { name: "start_play", strict: true },
+      { name: "check_in", strict: true },
+    ]);
     expect(request).toMatchObject({ model: "claude-sonnet-5-5", cache_control: { type: "ephemeral" }, output_config: { effort: "low" }, thinking: { type: "between_tools" } });
     expect(request).not.toHaveProperty("tool_choice");
   });
@@ -111,6 +118,33 @@ describe("runTurn", () => {
       { type: "tool_result", tool_use_id: "no_tool", content: "There's no tool called send_money.", is_error: true },
     ]);
     expect(result.text).toBe("Sorry about that.");
+  });
+
+  const sockSorting = { activity: "Fake sock sorting", setup: "Tip out the socks.", location: "home", props: ["socks"], minutes: 45 };
+  const lovedIt = { went: "loved", minutes: 50, feedback: "Sorted every sock twice." };
+
+  it("records a suggested activity and its check-in for the brain to file", async () => {
+    const { outcome } = run(
+      { content: [{ type: "text", text: "Try sock sorting." }, { type: "tool_use", id: "toolu_start", name: "start_play", input: sockSorting }] },
+      { content: [{ type: "tool_use", id: "toolu_check", name: "check_in", input: lovedIt }] },
+      { content: [{ type: "text", text: "Lovely." }] },
+    );
+    const result = await outcome;
+    expect(result.plays).toEqual([
+      { type: "start", play: sockSorting },
+      { type: "check_in", checkIn: lovedIt },
+    ]);
+    expect(result.turns[0].role === "assistant" && result.turns[0].tool_calls).toEqual([{ id: "toolu_start", name: "start_play", input: sockSorting }]);
+  });
+
+  it("only takes a check-in when a play session is waiting for one", async () => {
+    const refused = run({ content: [{ type: "tool_use", id: "toolu_check", name: "check_in", input: lovedIt }] }, { content: [{ type: "text", text: "Which activity was that?" }] });
+    expect((await refused.outcome).plays).toEqual([]);
+    expect(refused.claude.requests[1].messages.at(-1).content).toEqual([{ type: "tool_result", tool_use_id: "toolu_check", content: "No play session is waiting for a check-in.", is_error: true }]);
+    vi.restoreAllMocks();
+
+    const taken = runWith({ playOpen: true }, { content: [{ type: "tool_use", name: "check_in", input: lovedIt }] }, { content: [{ type: "text", text: "Lovely." }] });
+    expect((await taken.outcome).plays).toEqual([{ type: "check_in", checkIn: lovedIt }]);
   });
 
   it("keeps a silent reply out of the history", async () => {

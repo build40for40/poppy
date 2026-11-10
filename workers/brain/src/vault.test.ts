@@ -5,7 +5,7 @@ import type { UserBrain } from "./brain";
 import type { Reflection } from "./reflection";
 import { addLines, editSection, londonDate, londonDay, nextLondonMidnight, rebuildLinks, replaceAbout, replaceSessionLines, sessionNotePath, splitLearned, writeReflection, type ReflectedSession } from "./vault";
 
-const reflection: Reflection = { summary: "Asked about fake things.", preferences: ["Prefers short answers"] };
+const reflection: Reflection = { summary: "Asked about fake things.", preferences: ["Prefers short answers"], interests: [] };
 
 const session = (overrides: Partial<ReflectedSession> = {}): ReflectedSession => ({
   id: "aaaaaaaa-1111-4111-8111-111111111111",
@@ -103,9 +103,20 @@ describe("writeReflection", () => {
   it("replaces a session's own lines on a rerun and keeps other sessions' lines", async () => {
     await inVault("vault_rerun", (sql) => {
       writeReflection(sql, session(), "2026-11-10T19:00:00Z");
-      writeReflection(sql, session({ id: "bbbbbbbb-2222-4222-8222-222222222222", reflection: { summary: "Second chat.", preferences: ["Works nights", "prefers SHORT answers"] } }), "2026-11-10T19:30:00Z");
-      writeReflection(sql, session({ reflection: { summary: "Asked about fake things.", preferences: ["Likes lists"] } }), "2026-11-10T20:00:00Z");
+      writeReflection(sql, session({ id: "bbbbbbbb-2222-4222-8222-222222222222", reflection: { summary: "Second chat.", preferences: ["Works nights", "prefers SHORT answers"], interests: [] } }), "2026-11-10T19:30:00Z");
+      writeReflection(sql, session({ reflection: { summary: "Asked about fake things.", preferences: ["Likes lists"], interests: [] } }), "2026-11-10T20:00:00Z");
       expect(splitLearned(body(sql, "USER.md")).learned).toEqual(["Works nights", "Likes lists"]);
+    });
+  });
+
+  it("files interests in interests.md, once each, and in the session note", async () => {
+    await inVault("vault_interests", (sql) => {
+      writeReflection(sql, session({ reflection: { ...reflection, interests: ["Loves fake diggers"] } }), "2026-11-10T19:00:00Z");
+      writeReflection(sql, session({ id: "bbbbbbbb-2222-4222-8222-222222222222", reflection: { ...reflection, interests: ["loves FAKE diggers", "Bored by fake colouring"] } }), "2026-11-10T19:30:00Z");
+      expect(files(sql).find((f) => f.path === "interests.md")).toMatchObject({ kind: "interests" });
+      expect(body(sql, "interests.md")).toBe("# Interests\n\n## What they're into\n\n- Loves fake diggers ([[sessions/2026-11-10-aaaaaaaa]])\n- Bored by fake colouring ([[sessions/2026-11-10-bbbbbbbb]])\n");
+      expect(body(sql, "sessions/2026-11-10-aaaaaaaa.md")).toContain("## What they're into\n\n- Loves fake diggers\n");
+      expect(links(sql)).toContainEqual({ src: "interests.md", dst: "sessions/2026-11-10-aaaaaaaa.md", kind: "session" });
     });
   });
 

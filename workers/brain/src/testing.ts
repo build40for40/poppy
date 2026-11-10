@@ -113,6 +113,7 @@ function apiError(type: string, message: string) {
 export const fakeReflection = {
   summary: "  Asked about   fake things. Ended happy. ",
   preferences: ["Prefers short answers", "Prefers short answers", " "],
+  interests: ["Loves fake diggers", " "],
 };
 
 /** Fake numbers from Ofcom's range reserved for TV and radio drama. Nobody owns them. */

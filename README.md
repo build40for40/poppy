@@ -1,8 +1,8 @@
 # Poppy
 
-A WhatsApp assistant that remembers you. Day 7 of [40 for 40](https://build40for40.com): 40 apps in 40 days, built live on [Twitch](https://www.twitch.tv/40for40).
+A WhatsApp play helper for parents of small children. Day 7 of [40 for 40](https://build40for40.com): 40 apps in 40 days, built live on [Twitch](https://www.twitch.tv/40for40).
 
-This is the scaffolding. It can hold a conversation on WhatsApp and remember the person next time, and it doesn't know what it's for yet. Everything that waits on the product is marked `TODO(product)`.
+A parent who needs an hour messages Poppy. She checks where they are, suggests one activity the child can do, and stops. Afterwards the parent says how it went (Poppy asks once if they don't), and that goes into her memory of the child so the next suggestion fits better.
 
 ## How it works
 
@@ -13,7 +13,9 @@ WhatsApp ──webhook──▶ Worker   build40for40.com/poppy/api/whatsapp
                               ▼
                       UserBrain Durable Object, one per person
                         inbox ─▶ alarm ─▶ Claude turn ─▶ reply through the WhatsApp API
-                                   └────▶ 30 minutes quiet ─▶ reflection ─▶ markdown vault
+                                   │        └─▶ start_play / check_in ─▶ play log
+                                   ├────▶ 30 minutes quiet ─▶ reflection ─▶ markdown vault
+                                   └────▶ an hour after the activity should have ended ─▶ "how did it go?"
 ```
 
 `workers/brain/README.md` has the detail.
@@ -107,4 +109,4 @@ To see memory work without waiting half an hour, lower `IDLE_MINUTES` in `src/br
 
 - A deployed Worker. CI checks every push, and the deploy workflow is manual until the Meta secrets exist
 - A permanent access token (a System User in Meta Business Manager) to replace the 24 hour one
-- Everything marked `TODO(product)`
+- Onboarding, saved play locations and more than one child per number

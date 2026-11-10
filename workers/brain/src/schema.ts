@@ -1,12 +1,9 @@
-/**
- * Append-only: once the Worker has been deployed, never edit a migration, add a new one.
- * TODO(product): before the first deploy, add the product's note kinds to `files.kind` here. After it, that needs a new migration.
- */
+/** Append-only: once the Worker has been deployed, never edit a migration, add a new one. */
 const migrations: string[] = [
   `
   CREATE TABLE files (
     path TEXT PRIMARY KEY,
-    kind TEXT NOT NULL CHECK (kind IN ('user', 'memory', 'session')),
+    kind TEXT NOT NULL CHECK (kind IN ('user', 'memory', 'session', 'interests', 'play')),
     frontmatter TEXT NOT NULL DEFAULT '{}',
     body TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL

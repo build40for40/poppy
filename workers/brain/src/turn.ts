@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { liveRequest } from "./claude";
+import { parseCheckIn, parseStart, type PlayEvent } from "./plays";
 import type { ToolCall, Turn } from "./types";
 
 export const MAX_ROUNDS = 4;
@@ -10,6 +11,8 @@ export interface TurnInput {
   context: string;
   /** The history, ending with the user's new message. */
   messages: Anthropic.MessageParam[];
+  /** Whether a play session is waiting for a check-in as the turn starts. */
+  playOpen?: boolean;
   now?: () => string;
 }
 
@@ -18,6 +21,7 @@ export interface TurnOutcome {
   messages: Anthropic.MessageParam[];
   turns: Turn[];
   facts: string[];
+  plays: PlayEvent[];
   /** The whole reply as one string, empty when Claude had nothing to say. */
   text: string;
   timings: { total_ms: number; rounds: number };
@@ -41,14 +45,15 @@ export function appendUserText(messages: Anthropic.MessageParam[], text: string)
 }
 
 /** Runs one turn: calls Claude, runs its tools here and goes round again until it has finished replying. */
-export async function runTurn({ client, model, context, messages: history, now = () => new Date().toISOString() }: TurnInput): Promise<TurnOutcome> {
+export async function runTurn({ client, model, context, messages: history, playOpen = false, now = () => new Date().toISOString() }: TurnInput): Promise<TurnOutcome> {
   const started = Date.now();
   const messages = [...history];
   const turns: Turn[] = [];
   const facts: string[] = [];
+  const state: ToolState = { facts, plays: [], playOpen };
   const usage: TurnOutcome["usage"] = [];
   const said: string[] = [];
-  const outcome = (rounds: number): TurnOutcome => ({ messages, turns, facts, text: said.join("\n\n"), timings: { total_ms: Date.now() - started, rounds }, usage });
+  const outcome = (rounds: number): TurnOutcome => ({ messages, turns, facts, plays: state.plays, text: said.join("\n\n"), timings: { total_ms: Date.now() - started, rounds }, usage });
 
   for (let round = 1; round <= MAX_ROUNDS; round++) {
     const message = await client.messages.stream(liveRequest(model, context, messages)).finalMessage();
@@ -68,7 +73,7 @@ export async function runTurn({ client, model, context, messages: history, now =
     if (text) said.push(text);
 
     const recorded: ToolCall[] = [];
-    const results = toolUses.map((use) => runTool(use, facts, recorded));
+    const results = toolUses.map((use) => runTool(use, state, recorded));
     turns.push({ role: "assistant", at: now(), ...(text ? { text } : {}), ...(recorded.length ? { tool_calls: recorded } : {}) });
 
     if (!results.length) return outcome(round);
@@ -79,17 +84,40 @@ export async function runTurn({ client, model, context, messages: history, now =
   throw new TurnError(`Still calling tools after ${MAX_ROUNDS} rounds.`);
 }
 
+interface ToolState {
+  facts: string[];
+  plays: PlayEvent[];
+  playOpen: boolean;
+}
+
 /** Runs one tool call here in the Durable Object. A bad call goes back to Claude as an error result, so it can try again. */
-function runTool(use: Anthropic.ToolUseBlock, facts: string[], recorded: ToolCall[]): ToolResult {
+function runTool(use: Anthropic.ToolUseBlock, state: ToolState, recorded: ToolCall[]): ToolResult {
+  const failed = (content: string): ToolResult => ({ tool_use_id: use.id, content, is_error: true });
   if (use.name === "note") {
     const fact = (use.input as { fact?: unknown } | null)?.fact;
-    if (typeof fact !== "string" || !fact.trim()) return { tool_use_id: use.id, content: "note needs {fact}: one short fact, never empty.", is_error: true };
-    facts.push(fact.trim());
+    if (typeof fact !== "string" || !fact.trim()) return failed("note needs {fact}: one short fact, never empty.");
+    state.facts.push(fact.trim());
     recorded.push({ id: use.id, name: "note", input: { fact: fact.trim() } });
     return { tool_use_id: use.id, content: "saved" };
   }
-  // TODO(product): run the product's own tools here.
-  return { tool_use_id: use.id, content: `There's no tool called ${use.name}.`, is_error: true };
+  if (use.name === "start_play") {
+    const play = parseStart(use.input);
+    if (typeof play === "string") return failed(play);
+    state.plays.push({ type: "start", play });
+    state.playOpen = true;
+    recorded.push({ id: use.id, name: "start_play", input: { ...play } });
+    return { tool_use_id: use.id, content: "saved, waiting for their check-in" };
+  }
+  if (use.name === "check_in") {
+    if (!state.playOpen) return failed("No play session is waiting for a check-in.");
+    const checkIn = parseCheckIn(use.input);
+    if (typeof checkIn === "string") return failed(checkIn);
+    state.plays.push({ type: "check_in", checkIn });
+    state.playOpen = false;
+    recorded.push({ id: use.id, name: "check_in", input: { ...checkIn } });
+    return { tool_use_id: use.id, content: "saved" };
+  }
+  return failed(`There's no tool called ${use.name}.`);
 }
 
 function blocks(message: Anthropic.MessageParam): Anthropic.ContentBlockParam[] {

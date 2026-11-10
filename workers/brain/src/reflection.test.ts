@@ -15,7 +15,7 @@ const turns: Turn[] = [
   { role: "assistant", at: "2026-11-10T18:00:02Z", text: "Will do.", tool_calls: [{ id: "toolu_1", name: "note", input: { fact: "Prefers short answers" } }] },
 ];
 
-const input: ReflectionInput = { user: { preferences: {}, about: "# About me" }, turns, facts: ["Prefers short answers"] };
+const input: ReflectionInput = { user: { preferences: {}, about: "# About me" }, interests: "# Interests\n\n## What they're into\n\n- Loves fake trains\n", turns, facts: ["Prefers short answers"] };
 
 const reply = (output: unknown) => ({ content: [{ type: "text" as const, text: typeof output === "string" ? output : JSON.stringify(output) }] });
 
@@ -27,6 +27,7 @@ describe("reflectionRequest", () => {
     expect(request).not.toHaveProperty("tool_choice");
     const content = request.messages[0].content as string;
     expect(content).toContain("# About me");
+    expect(content).toContain("- Loves fake trains");
     expect(content).toContain("User: Keep it short please.");
     expect(content).toContain("- Prefers short answers");
   });
@@ -44,7 +45,7 @@ describe("reflect", () => {
   it("checks and tidies what Opus returns", async () => {
     mockClaude(reply(fakeReflection));
     const { reflection } = await reflect(client(), input);
-    expect(reflection).toEqual({ summary: "Asked about fake things. Ended happy.", preferences: ["Prefers short answers"] });
+    expect(reflection).toEqual({ summary: "Asked about fake things. Ended happy.", preferences: ["Prefers short answers"], interests: ["Loves fake diggers"] });
   });
 
   it("won't retry a refusal, output that isn't JSON or output off the schema", async () => {
