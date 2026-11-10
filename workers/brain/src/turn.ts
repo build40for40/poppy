@@ -80,6 +80,9 @@ export async function runTurn({ client, model, context, messages: history, playO
     // Every tool_use needs its result in the very next user message, all together.
     messages.push({ role: "user", content: results.map((r): Anthropic.ToolResultBlockParam => ({ type: "tool_result", ...r })) });
     if (message.stop_reason !== "tool_use") return outcome(round);
+    // A suggestion is the whole reply. Asked to carry on after it, Claude signs off a second time.
+    const suggested = text && recorded.some((call) => call.name === "start_play") && results.every((r) => !r.is_error);
+    if (suggested) return outcome(round);
   }
   throw new TurnError(`Still calling tools after ${MAX_ROUNDS} rounds.`);
 }
