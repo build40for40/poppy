@@ -26,13 +26,18 @@ export const tools = [
     input_schema: {
       type: "object",
       additionalProperties: false,
-      required: ["activity", "setup", "location", "props", "minutes"],
+      required: ["activity", "setup", "location", "props", "minutes", "picture", "picture_brief"],
       properties: {
         activity: { type: "string", description: "A short name for the activity, a few words. Never empty." },
         setup: { type: "string", description: "How the parent sets it up, as you told them. Never empty." },
         location: { type: "string", description: "Where they are, in the parent's words, like home, the garden or the park. Never empty." },
         props: { type: "array", items: { type: "string" }, description: "The things it needs. Empty when it needs nothing." },
         minutes: { type: "integer", description: "How long it's meant to keep the child busy, in minutes, from 5 to 180." },
+        picture: { type: "string", description: "The id of the picture from the Pictures list that best shows this activity, sent on top of your reply. Empty when none of them is close." },
+        picture_brief: {
+          type: "string",
+          description: "Only when picture is empty: what a new picture of this activity should show, in a sentence of general words, like \"toy cars racing down a cardboard ramp\". Every family will see it, so no names or details about this family. Empty when you chose a picture.",
+        },
       },
     },
   },

@@ -1,8 +1,8 @@
 import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
 
-/** A fake sandbox sender, from Ofcom's range reserved for TV and radio drama. Nobody owns it. */
-const FAKE_SENDER_DIGITS = "447700900998";
+/** Two fake sandbox senders, from Ofcom's range reserved for TV and radio drama. Nobody owns them. */
+const FAKE_SENDERS = ["447700900998", "447700900997"].map((digits) => `whatsapp:+${digits}`);
 
 export default defineConfig({
   plugins: [
@@ -23,7 +23,7 @@ export default defineConfig({
           WHATSAPP_PHONE_NUMBER_ID: "100000000000001",
           TWILIO_ACCOUNT_SID: "ACfake00000000000000000000000000001",
           TWILIO_AUTH_TOKEN: "fake-twilio-auth-token",
-          TWILIO_WHATSAPP_FROM: `whatsapp:+${FAKE_SENDER_DIGITS}`,
+          TWILIO_WHATSAPP_FROM: FAKE_SENDERS.join(", "),
           PUBLIC_BASE_URL: "https://fake-tunnel.example.com",
         },
       },

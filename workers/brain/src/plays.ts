@@ -11,6 +11,7 @@ export const HOW_IT_WENT = "How it went";
 const MAX_NAME = 80;
 const MAX_TEXT = 1_500;
 const MAX_PROPS = 12;
+const MAX_BRIEF = 300;
 const WENT = ["loved", "fine", "flop"] as const;
 
 export type Went = (typeof WENT)[number];
@@ -21,6 +22,10 @@ export interface PlayStart {
   location: string;
   props: string[];
   minutes: number;
+  /** The picture Claude chose to go on top of the suggestion, or empty for none. */
+  picture: string;
+  /** What a new picture should show, when none fitted. Never saved to the play note: it's for the picture shelf. */
+  pictureBrief: string;
 }
 
 export interface PlayCheckIn {
@@ -60,7 +65,9 @@ export function parseStart(input: unknown): PlayStart | string {
   if (!activity || !setup || !location) return "start_play needs activity, setup and location, none of them empty.";
   const props = Array.isArray(input.props) ? [...new Set(input.props.map((p) => oneLine(p, MAX_NAME)).filter(Boolean))].slice(0, MAX_PROPS) : [];
   const minutes = typeof input.minutes === "number" && Number.isFinite(input.minutes) ? Math.min(Math.max(Math.round(input.minutes), 5), MAX_PLAY_MINUTES) : DEFAULT_PLAY_MINUTES;
-  return { activity, setup, location, props, minutes };
+  const picture = oneLine(input.picture, MAX_NAME).toLowerCase();
+  const pictureBrief = picture ? "" : oneLine(input.picture_brief, MAX_BRIEF);
+  return { activity, setup, location, props, minutes, picture, pictureBrief };
 }
 
 /** Checks a `check_in` call. Returns what to save, or what was wrong with it for Claude to fix. */
@@ -105,9 +112,9 @@ export function applyPlayEvents(sql: SqlStorage, events: PlayEvent[], sessionId:
     }
     if (open?.sessionId === sessionId) sql.exec("DELETE FROM files WHERE path = ?", open.path);
     else if (open) update(sql, open.path, { status: "no_check_in", ended_at: now }, now);
-    const { activity, setup, location, props, minutes } = event.play;
+    const { activity, setup, location, props, minutes, picture } = event.play;
     const id = crypto.randomUUID();
-    const frontmatter = { play_id: id, session_id: sessionId, activity, location, props, planned_minutes: minutes, started_at: now, status: "open" };
+    const frontmatter = { play_id: id, session_id: sessionId, activity, location, props, planned_minutes: minutes, ...(picture ? { picture } : {}), started_at: now, status: "open" };
     writeFile(sql, `plays/${londonDate(now)}-${id.slice(0, 8)}.md`, "play", frontmatter, `# ${activity}\n\n${setup}\n`, now);
   }
 }

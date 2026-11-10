@@ -13,6 +13,7 @@ Everything lives under `/poppy/api`. There is one path per provider.
 | `GET /whatsapp` | Meta's verify handshake. With `hub.mode=subscribe` and a `hub.verify_token` equal to `WHATSAPP_VERIFY_TOKEN` it answers `200` with `hub.challenge`. Otherwise `403` |
 | `POST /whatsapp` | Meta's webhook. Checks `X-Hub-Signature-256` against the raw body, hands each incoming message to its sender's Durable Object and answers `200`. `401 bad_signature`, `400 invalid_json`, `413 body_too_large`, `503 whatsapp_unavailable` if the app secret isn't set |
 
+| `GET /pictures/<id>.png` | A picture as a PNG, for Twilio or Meta to fetch and put on a suggestion. Public: pictures hold no one's data. Drawn from the SVG on the first fetch and cached at the edge for a day. `404` for an unknown id |
 | `POST /twilio` | Twilio's webhook, one message per request as form fields. Checks `X-Twilio-Signature`, hands the message to its sender's Durable Object and answers `200` with empty TwiML. `401 bad_signature`, `413 body_too_large`, `503 twilio_unavailable` if the auth token isn't set |
 
 | `POST /dev` | Local only. Exists while `DEV_TOOLS` is `true`, and is a `404 not_found` like any unknown path otherwise. Takes the webhook's signature and a JSON body naming a sender and a command: `memory` returns the vault, `end` ends the open chat and reflects, `advance` moves the stored times back and runs the alarm. It returns vault content and logs none of it |
@@ -35,10 +36,10 @@ If the turn fails, the person gets a short apology and nothing is saved, so thei
 The Twilio route does the same job with Twilio's shapes (`src/twilio.ts`):
 
 - **Signature.** `X-Twilio-Signature` is the base64 HMAC SHA-1, under the auth token, of the URL Twilio called followed by every form field's name and value, sorted by name. It's checked against the raw form body before the message is used. The URL is the request's own. Behind a tunnel the Worker sees a different host than Twilio called, so `PUBLIC_BASE_URL` gives a second address to check against. Forwarded-host headers aren't trusted.
-- **The message.** One per request. It must be for our account and our sender number, from a `whatsapp:+…` address. A body is text. Media (voice notes included) and locations are marked unsupported. `incomingTwilioMessage` has the `TODO(product)` where voice-note transcription plugs in.
+- **The message.** One per request. It must be for our account and one of our sender numbers, from a `whatsapp:+…` address. A body is text. Media (voice notes included) and locations are marked unsupported. `incomingTwilioMessage` has the `TODO(product)` where voice-note transcription plugs in.
 - **Repeats.** Twilio's `MessageSid` goes in the same inbox, so a repeat is dropped the same way.
 - **Who they are.** The identity is `twilio:` then the number, hashed, so the same phone on Meta and on Twilio is two separate brains. The object remembers which provider the person's messages come through and replies the same way.
-- **Replies.** Through Twilio's Messages API with the account SID and auth token, split at 1,600 characters. The sandbox sends one message every three seconds, so the pieces of a long reply are sent 3.1 seconds apart (`TWILIO_SEND_GAP_MS`). There's no read receipt or typing indicator.
+- **Replies.** Through Twilio's Messages API with the account SID and auth token, from the sender number the person last wrote to, split at 1,600 characters. The sandbox sends one message every three seconds, so the pieces of a long reply are sent 3.1 seconds apart (`TWILIO_SEND_GAP_MS`). There's no read receipt or typing indicator.
 
 `/forget`, echo mode, sessions and reflection don't know which provider is in use.
 
@@ -63,6 +64,17 @@ A chat and a play session are different things. Mum asks at 14:00, the child pla
 - **`check_in`** closes the open play session with `went` (`loved`, `fine` or `flop`), how many minutes it lasted when the parent said, and their feedback under `## How it went`. With nothing open it goes back to Claude as an error.
 - **Every new chat is told** which play session is still waiting, so a check-in that arrives hours later lands on the right one.
 - **The nudge.** If a play session is still open `NUDGE_AFTER_MINUTES` (60) after it was meant to end, the alarm sends one message asking how it went and stamps `nudged_at` on the note. It's sent once, never while a chat is open, and it's always inside WhatsApp's 24 hour window because the parent wrote at most four hours earlier.
+
+## Pictures
+
+Every suggestion goes out with a picture on top, the reply as its caption (`src/pictures.ts`, `src/shelf.ts`).
+
+- **The set.** Thirty starter pictures of the most common activities live in `src/starter-pictures.ts`, hand-drawn in one flat style: a scene (`indoor`, `outdoor` or `floor`) with plain shapes on top, no people and no words. Every new chat lists them in the context, by id and a one-line description.
+- **Choosing.** `start_play` carries `picture`, the id Claude chose, and the brain sends it if it exists. It's saved on the play note.
+- **When none fits,** Claude leaves `picture` empty and writes `picture_brief` in general words, and the reply goes without a picture. The brain hands the brief to the `PictureShelf` Durable Object, one shared by every family, which draws it on its own alarm with Opus. The parent never waits for it. The drawing has to be plain shapes (`checkBody`) and has to render, or it's thrown away. Failed drawings are retried twice, then dropped.
+- **Next time.** A new picture joins the set straight away, so the next chat whose activity it fits gets it. No one approves it first. Every one is logged as `picture_drawn` with its id and description. To look at one, open `/poppy/api/pictures/<id>.png`. To delete one, call `remove(id)` on the shelf.
+- **Limits.** At most 40 drawings a day, 300 in all and 20 waiting, so a loop can't run up a bill.
+- **Sending.** Twilio gets `MediaUrl` and Meta an `image` message with a `link`, both pointing at `PICTURES_BASE_URL`, or at `PUBLIC_BASE_URL` behind a tunnel. A reply longer than WhatsApp's 1,024 character caption goes as the picture on its own, then the text.
 
 ## Reflection
 
@@ -106,7 +118,7 @@ One thing to know: a message that arrives while a reflection is running waits fo
 | `WHATSAPP_PHONE_NUMBER_ID` | secret | The business number's id. Webhooks for any other number are ignored |
 | `TWILIO_ACCOUNT_SID` | secret | The Twilio account. Webhooks for any other account are ignored |
 | `TWILIO_AUTH_TOKEN` | secret | Checks every Twilio webhook's signature and sends every Twilio reply |
-| `TWILIO_WHATSAPP_FROM` | secret | The sender, as `whatsapp:+` then the number. Messages to any other number are ignored |
+| `TWILIO_WHATSAPP_FROM` | secret | The sender, as `whatsapp:+` then the number. Several senders go in one value, separated by commas. Messages to any other number are ignored, and each person is answered from the number they wrote to |
 | `PUBLIC_BASE_URL` | var | Only for Twilio behind a tunnel: the tunnel's address, so the signature check knows the URL Twilio called |
 | `WHATSAPP_API_VERSION` | var | The Graph API version, `v27.0` |
 | `LIVE_MODEL` | var | The model for live turns. New sessions pick up a change; open ones keep theirs |
@@ -132,6 +144,8 @@ The secrets are typed by hand in `src/env.d.ts`, because `wrangler.jsonc` lists 
 | `src/turn.ts` | One live turn with Claude, running tools here |
 | `src/claude.ts`, `src/tools.ts`, `src/prompt.ts` | The request shape, the tool list, the prompt and context |
 | `src/plays.ts` | Play sessions: checking the tool calls, the notes, the one open session, when to nudge |
+| `src/pictures.ts`, `src/starter-pictures.ts` | The picture style, the thirty starter pictures, the shape check and drawing to PNG |
+| `src/shelf.ts` | The shared `PictureShelf` Durable Object: drawn pictures, and drawing new ones |
 | `src/reflection.ts` | The reflection schema, prompt, call and retry rules |
 | `src/vault.ts`, `src/wikilinks.ts` | Notes, sections, links, London dates |
 | `src/schema.ts`, `src/seed.ts` | Migrations and the starter `USER.md` |

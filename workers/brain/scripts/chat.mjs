@@ -181,9 +181,11 @@ const fakeGraph = createServer((request, response) => {
       response.end(JSON.stringify({ error: { code: 100, message: "The terminal chat only takes the messages call." } }));
       return;
     }
-    if (sent.type === "text" && typeof sent.text?.body === "string") {
+    const picture = sent.type === "image" && typeof sent.image?.link === "string" ? `[picture: ${sent.image.link}]` : null;
+    const body = picture ? [picture, sent.image.caption].filter(Boolean).join("\n") : sent.type === "text" ? sent.text?.body : null;
+    if (typeof body === "string") {
       const to = sent.recipient ?? sent.to;
-      show(`${to === userId ? "poppy" : "poppy, to another family"}> ${sent.text.body}`);
+      show(`${to === userId ? "poppy" : "poppy, to another family"}> ${body}`);
       if (to === userId) waitingForReply = false;
       lastActivity = Date.now();
     }

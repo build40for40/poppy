@@ -212,7 +212,7 @@ Add these to `workers/brain/.dev.vars`:
 | --- | --- |
 | `TWILIO_ACCOUNT_SID` | The Account SID, starting `AC` |
 | `TWILIO_AUTH_TOKEN` | The Auth Token. It signs every webhook and sends every reply |
-| `TWILIO_WHATSAPP_FROM` | The sandbox sender, written the way Twilio does: `whatsapp:+` then the sandbox number with no spaces |
+| `TWILIO_WHATSAPP_FROM` | The sandbox sender, written the way Twilio does: `whatsapp:+` then the sandbox number with no spaces. If testers were given different sandbox numbers, list them all, separated by commas |
 | `PUBLIC_BASE_URL` | The tunnel address from the next step, for example `https://<random words>.trycloudflare.com`. Twilio signs the address it called, and behind a tunnel the Worker can't see that address on its own |
 | `ECHO_MODE` | `true` to start with, as above |
 

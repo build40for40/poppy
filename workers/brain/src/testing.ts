@@ -1,7 +1,7 @@
 import { env, exports } from "cloudflare:workers";
 import { vi } from "vitest";
 import { BASE_PATH } from "./http";
-import { signTwilio, twilioMessagesUrl } from "./twilio";
+import { signTwilio, twilioMessagesUrl, twilioSenders } from "./twilio";
 import { brainName, sign, type Address } from "./whatsapp";
 
 export type ClaudeBlock = { type: "text"; text: string } | { type: "tool_use"; id?: string; name: string; input: unknown };
@@ -218,6 +218,9 @@ export const brainFor = async (address: Address) => env.USER_BRAIN.get(env.USER_
 
 let twilioMessageCount = 0;
 
+/** The fake sender numbers the tests' Worker answers on. */
+export const [FAKE_SENDER, OTHER_FAKE_SENDER] = twilioSenders(env.TWILIO_WHATSAPP_FROM);
+
 /** A fake Twilio message id: two letters and 32 hex digits. */
 export const fakeSid = () => `SM${String(++twilioMessageCount).padStart(32, "0")}`;
 
@@ -237,7 +240,7 @@ export function fakeTwilioParams(from: Address, body: string, extra: Record<stri
     WaId: from.phone!,
     SmsStatus: "received",
     Body: body,
-    To: env.TWILIO_WHATSAPP_FROM,
+    To: FAKE_SENDER,
     NumSegments: "1",
     ReferralNumMedia: "0",
     MessageSid: fakeSid(),

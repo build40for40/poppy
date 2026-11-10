@@ -3,7 +3,8 @@
 Day 7 of 40 for 40, built live on Twitch on Tuesday 10 November 2026. Poppy is a play helper for parents of small children: a parent who needs an hour messages her on WhatsApp, she suggests one activity for the child, and she remembers how each one went.
 
 - **Form factor:** an assistant parents talk to on WhatsApp, which remembers each family between conversations.
-- **Layout:** `workers/brain` is the only component: a Cloudflare Worker that takes the WhatsApp webhook, in front of one `UserBrain` Durable Object per person. Its README is the spec. Setup and the local sandbox runbook are in `README.md`.
+- **Layout:** `workers/brain` is the only running component: a Cloudflare Worker that takes the WhatsApp webhook, in front of one `UserBrain` Durable Object per person. Its README is the spec. Setup and the local sandbox runbook are in `README.md`.
+- **Landing page:** `landing/index.html` is the draft page parents would see: one file, a WhatsApp chat in a phone that plays out as you scroll, in Poppy's real message shapes from `docs/parent-messages.md`. The conversation is the plain text block near the bottom of the file, one line per message. It isn't served anywhere yet.
 - **Where it came from:** the brain is the Sous brain (Day 5, `sous/workers/brain`) with the cooking taken out. The kit's `agent-memory` skill says what was kept and why.
 - **Tracking:** the Superthread `day7` board. The architecture review card lists the decisions and the known unknowns.
 
@@ -12,9 +13,9 @@ Shared 40 for 40 context lives in `../AGENTS.md`.
 ## Decided
 
 - The assistant reuses the Sous brain: a markdown vault per person, live Claude turns, and a reflection after each conversation that files what it learned.
-- People reach it on WhatsApp through Meta's WhatsApp Cloud API, starting on Meta's test number.
+- People reach it on WhatsApp through Twilio's WhatsApp sandbox. We dropped Meta's WhatsApp Cloud API on 10 November. The Meta route is still in the code but isn't used.
 - One Worker, with the webhook route and the Durable Object together.
-- A person is known by what Meta's verified webhook says about the sender, never by anything typed in a message. There's no sign-in.
+- A person is known by the sender in a webhook whose signature checks out, never by anything typed in a message. There's no sign-in.
 - `/forget` deletes everything the brain holds about the sender.
 - Deploys go through CI, never by hand.
 - Poppy only suggests play activities and records how they went. Anything else is politely out of scope.
@@ -23,6 +24,7 @@ Shared 40 for 40 context lives in `../AGENTS.md`.
 - About the child, Poppy keeps age, boy or girl, a nickname and whatever else helps pick activities. No surname, address or school.
 - Poppy confirms where the family is before suggesting, suggests one activity, then stops.
 - Poppy messages first exactly once per play session: a check-in nudge an hour after the activity was meant to end, if nobody has said how it went.
+- Every suggestion goes out with a picture. Poppy picks from a set of pictures, starting with thirty hand-drawn ones. When none fits, a new one is drawn in the background, used from the next time on, and joins the set without anyone approving it first.
 
 ## Still open
 

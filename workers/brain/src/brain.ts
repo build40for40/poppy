@@ -1,17 +1,20 @@
 import { DurableObject } from "cloudflare:workers";
+import { BASE_PATH } from "./http";
 import type Anthropic from "@anthropic-ai/sdk";
 import { createClient, liveModel } from "./claude";
 import { USER_MD, type Preferences, type Profile, type PublicProfile } from "./profile";
-import { applyPlayEvents, markNudged, MAX_PLAY_NOTES, NUDGE_AFTER_MINUTES, nudgeDue, openPlay } from "./plays";
+import { applyPlayEvents, markNudged, MAX_PLAY_NOTES, NUDGE_AFTER_MINUTES, nudgeDue, openPlay, type PlayEvent } from "./plays";
+import { starterPicture, type PictureEntry } from "./pictures";
 import { assembleContext, MAX_SESSION_NOTES, MEMORY_MD, type Note } from "./prompt";
 import { isRetryable, reflect, type Reflection } from "./reflection";
 import { migrate } from "./schema";
 import { starterAbout, starterPreferences } from "./seed";
 import { appendUserText, runTurn } from "./turn";
 import type { Turn } from "./types";
-import { sendTwilioText, TWILIO_SEND_GAP_MS } from "./twilio";
+import { allPictures, shelfOf } from "./shelf";
+import { sendTwilioText, TWILIO_SEND_GAP_MS, twilioSenders } from "./twilio";
 import { INTERESTS_MD, londonDate, londonDay, londonTime, nextLondonMidnight, readFile, splitLearned, writeFile, writeReflection } from "./vault";
-import { markReadAndTyping, sendText, WhatsAppError, type Address, type Incoming, type Provider } from "./whatsapp";
+import { markReadAndTyping, sendText, WhatsAppError, type Address, type Incoming } from "./whatsapp";
 
 /** A chat has no "end" button, so a session ends when the person has been quiet this long. A play session outlives it: see plays.ts. */
 export const IDLE_MINUTES = 30;
@@ -42,7 +45,8 @@ export const REPLIES = {
 
 /** How replies get back to a person: the provider their messages arrive through. */
 interface Channel {
-  send(to: Address, text: string): Promise<void>;
+  /** Sends a reply, with a picture on top when there's a picture URL. */
+  send(to: Address, text: string, picture?: string): Promise<void>;
   /** Marks a message read and shows typing, where the provider can. */
   markRead(messageId: string): Promise<void>;
 }
@@ -269,7 +273,7 @@ export class UserBrain extends DurableObject<Env> {
   private async answerInbox(): Promise<void> {
     for (let rows = this.unhandled(); rows.length; rows = this.unhandled()) {
       const address = this.address();
-      const whatsapp = address && this.channel(address.provider ?? "meta");
+      const whatsapp = address && this.channel(address);
       if (!address || !whatsapp) {
         console.warn(JSON.stringify({ event: "brain_reply_skipped", reason: address ? "provider_not_configured" : "no_address", provider: address?.provider, messages: rows.length }));
         this.markHandled(rows);
@@ -294,22 +298,22 @@ export class UserBrain extends DurableObject<Env> {
       }
 
       await whatsapp.markRead(rows.at(-1)!.message_id).catch((e) => this.logSendFailure("whatsapp_read_failed", e));
-      const reply = this.env.ECHO_MODE?.trim().toLowerCase() === "true" ? text : await this.takeTurn(text);
+      const reply = this.env.ECHO_MODE?.trim().toLowerCase() === "true" ? { text, picture: null } : await this.takeTurn(text);
       // Handled before the reply goes out: the turn is already saved, so a failed send mustn't run it twice.
       this.markHandled(rows);
-      if (reply) await this.send(whatsapp, address, reply);
+      if (reply.text) await this.send(whatsapp, address, reply.text, reply.picture ?? undefined);
     }
   }
 
-  /** Runs one turn of the open session, starting a session if there isn't one. Returns what to send back, or null for nothing. */
-  private async takeTurn(text: string): Promise<string | null> {
+  /** Runs one turn of the open session, starting a session if there isn't one. Returns what to send back: empty text for nothing. */
+  private async takeTurn(text: string): Promise<{ text: string; picture: string | null }> {
     if (!this.env.ANTHROPIC_API_KEY) {
       console.warn(JSON.stringify({ event: "brain_turn_skipped", reason: "no_api_key" }));
-      return REPLIES.unavailable;
+      return { text: REPLIES.unavailable, picture: null };
     }
     const now = new Date();
     this.endExpiredSessions(now);
-    const session = this.openSession() ?? this.startSession(now);
+    const session = this.openSession() ?? this.startSession(now, await this.pictures());
     try {
       const outcome = await runTurn({
         client: createClient(this.env.ANTHROPIC_API_KEY),
@@ -334,12 +338,53 @@ export class UserBrain extends DurableObject<Env> {
       });
       if (userTurns >= TURN_CAP) this.endSession(session.id, "turn_cap", new Date());
       console.log(JSON.stringify({ event: "brain_turn", session_id: session.id, model: session.model, user_turns: userTurns, ...outcome.timings, usage: outcome.usage }));
-      return outcome.text || null;
+      return { text: outcome.text, picture: outcome.text ? await this.pictureFor(outcome.plays) : null };
     } catch (e) {
       // Nothing was saved, so their next message starts from the same history. The error can't hold the prompt: the SDK only reports the API's own message.
       console.error(JSON.stringify({ event: "brain_turn_failed", session_id: session.id, model: session.model, error: String(e) }));
-      return REPLIES.turnFailed;
+      return { text: REPLIES.turnFailed, picture: null };
     }
+  }
+
+  // Pictures
+
+  /** Every picture Claude can choose from: the starter set, then what the shelf has drawn. The starter set alone if the shelf can't be reached. */
+  private async pictures(): Promise<PictureEntry[]> {
+    const drawn = await shelfOf(this.env)
+      .list()
+      .catch((e) => {
+        console.error(JSON.stringify({ event: "picture_list_failed", error: String(e) }));
+        return [];
+      });
+    return allPictures(drawn);
+  }
+
+  /**
+   * The URL of the picture for this turn's suggestion, if it made one. A picture Claude chose goes out if it exists. When
+   * none fitted, the shelf is asked to draw one for next time, and this reply goes without.
+   */
+  private async pictureFor(events: PlayEvent[]): Promise<string | null> {
+    const start = events.findLast((e) => e.type === "start");
+    if (start?.type !== "start") return null;
+    const { activity, picture, pictureBrief } = start.play;
+    const shelf = shelfOf(this.env);
+    try {
+      if (picture && (starterPicture(picture) || (await shelf.get(picture)))) return this.pictureUrl(picture);
+      if (pictureBrief) {
+        const result = await shelf.want({ activity, brief: pictureBrief });
+        console.log(JSON.stringify({ event: "picture_wanted", result }));
+      }
+    } catch (e) {
+      console.error(JSON.stringify({ event: "picture_lookup_failed", error: String(e) }));
+    }
+    return null;
+  }
+
+  /** Where Twilio and Meta fetch a picture. Behind a tunnel that's the tunnel, so a local run can send pictures too. */
+  private pictureUrl(id: string): string {
+    const tunnel = this.env.PUBLIC_BASE_URL?.trim().replace(/\/+$/, "");
+    const base = tunnel ? `${tunnel}${BASE_PATH}/pictures` : this.env.PICTURES_BASE_URL.replace(/\/+$/, "");
+    return `${base}/${id}.png`;
   }
 
   /** Wipes the object, confirms, then puts back any messages that arrived after the command so they're answered by a fresh brain. */
@@ -355,8 +400,8 @@ export class UserBrain extends DurableObject<Env> {
     }
   }
 
-  private async send(whatsapp: Channel, address: Address, text: string): Promise<void> {
-    await whatsapp.send(address, text).catch((e) => this.logSendFailure("whatsapp_send_failed", e));
+  private async send(whatsapp: Channel, address: Address, text: string, picture?: string): Promise<void> {
+    await whatsapp.send(address, text, picture).catch((e) => this.logSendFailure("whatsapp_send_failed", e));
   }
 
   private logSendFailure(event: string, e: unknown): void {
@@ -367,13 +412,13 @@ export class UserBrain extends DurableObject<Env> {
 
   // Sessions
 
-  private startSession(now: Date): SessionRow {
+  private startSession(now: Date, pictures: PictureEntry[]): SessionRow {
     const at = now.toISOString();
     const row: SessionRow = {
       id: crypto.randomUUID(),
       // The model and context are fixed for the session, so a config change mid-conversation can't break the prompt cache.
       model: liveModel(this.env),
-      context: this.assembleContext(at),
+      context: this.assembleContext(at, pictures),
       messages: "[]",
       turns: "[]",
       facts: "[]",
@@ -410,7 +455,7 @@ export class UserBrain extends DurableObject<Env> {
     this.sql.exec("UPDATE sessions SET ended_at = ?, end_reason = ?, reflect_after = ? WHERE id = ? AND ended_at IS NULL", at, reason, at, id);
   }
 
-  private assembleContext(at: string): string {
+  private assembleContext(at: string, pictures: PictureEntry[]): string {
     const { preferences, about } = this.readUserMd();
     const sessionNotes = this.sql.exec<NoteRow>("SELECT path, frontmatter, body FROM files WHERE kind = 'session' ORDER BY path DESC LIMIT ?", MAX_SESSION_NOTES).toArray();
     const plays = this.sql.exec<NoteRow>("SELECT path, frontmatter, body FROM files WHERE kind = 'play' ORDER BY json_extract(frontmatter, '$.started_at') DESC LIMIT ?", MAX_PLAY_NOTES).toArray();
@@ -421,6 +466,7 @@ export class UserBrain extends DurableObject<Env> {
       plays: plays as Note[],
       openPlay: openPlay(this.sql)?.path ?? null,
       sessionNotes: sessionNotes as Note[],
+      pictures,
       time: londonTime(at),
       today: londonDay(at),
     });
@@ -484,7 +530,7 @@ export class UserBrain extends DurableObject<Env> {
     const play = openPlay(this.sql);
     if (!play || play.nudgedAt || this.openSession() || now.getTime() < nudgeDue(play, this.nudgeAfterMinutes)) return;
     const address = this.address();
-    const whatsapp = address && this.channel(address.provider ?? "meta");
+    const whatsapp = address && this.channel(address);
     if (!address || !whatsapp) return;
     // Marked before it goes out, so a send that fails isn't tried again and again.
     markNudged(this.sql, play.path, now.toISOString());
@@ -521,7 +567,7 @@ export class UserBrain extends DurableObject<Env> {
   }
 
   /** The object is named by a hash, so it keeps the number (or user id) it needs to reply to. It's never logged, and /forget deletes it. */
-  private saveAddress({ phone, userId, provider }: Address): void {
+  private saveAddress({ phone, userId, provider, sender }: Address): void {
     const save = (key: string, value: string | null) => {
       if (value) this.sql.exec("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value", key, value);
     };
@@ -529,23 +575,26 @@ export class UserBrain extends DurableObject<Env> {
     save("user_id", userId);
     // Replies go back the way the person's latest message came in.
     save("provider", provider ?? "meta");
+    save("sender", sender ?? null);
   }
 
   private address(): Address | null {
     const get = (key: string) => this.sql.exec<{ value: string }>("SELECT value FROM settings WHERE key = ?", key).toArray()[0]?.value ?? null;
-    const address: Address = { phone: get("phone"), userId: get("user_id"), provider: get("provider") === "twilio" ? "twilio" : "meta" };
+    const address: Address = { phone: get("phone"), userId: get("user_id"), provider: get("provider") === "twilio" ? "twilio" : "meta", sender: get("sender") ?? undefined };
     return address.phone || address.userId ? address : null;
   }
 
   /** The send side of a provider, or null while its secrets aren't set. */
-  private channel(provider: Provider): Channel | null {
+  private channel({ provider, sender }: Address): Channel | null {
     if (provider === "twilio") {
-      const { TWILIO_ACCOUNT_SID: accountSid, TWILIO_AUTH_TOKEN: authToken, TWILIO_WHATSAPP_FROM: from } = this.env;
+      const { TWILIO_ACCOUNT_SID: accountSid, TWILIO_AUTH_TOKEN: authToken } = this.env;
+      const senders = twilioSenders(this.env.TWILIO_WHATSAPP_FROM);
+      const from = sender && senders.includes(sender) ? sender : senders[0];
       if (!accountSid || !authToken || !from) return null;
       const config = { accountSid, authToken, from, gapMs: TWILIO_SEND_GAP_MS };
       return {
-        send: async (to, text) => {
-          if (to.phone) await sendTwilioText(config, to.phone, text);
+        send: async (to, text, picture) => {
+          if (to.phone) await sendTwilioText(config, to.phone, text, picture);
         },
         // Twilio's sandbox has no read receipt or typing indicator to set.
         markRead: async () => {},
@@ -554,7 +603,7 @@ export class UserBrain extends DurableObject<Env> {
     const { WHATSAPP_TOKEN: token, WHATSAPP_PHONE_NUMBER_ID: phoneNumberId, WHATSAPP_API_VERSION: apiVersion, WHATSAPP_API_BASE: apiBase } = this.env;
     if (!token || !phoneNumberId || !apiVersion) return null;
     const config = { token, phoneNumberId, apiVersion, apiBase };
-    return { send: (to, text) => sendText(config, to, text), markRead: (messageId) => markReadAndTyping(config, messageId) };
+    return { send: (to, text, picture) => sendText(config, to, text, picture), markRead: (messageId) => markReadAndTyping(config, messageId) };
   }
 
   private readUserMd(): Profile {
