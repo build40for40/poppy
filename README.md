@@ -1,4 +1,4 @@
-# Day 7 (placeholder name)
+# Poppy
 
 A WhatsApp assistant that remembers you. Day 7 of [40 for 40](https://build40for40.com): 40 apps in 40 days, built live on [Twitch](https://www.twitch.tv/40for40).
 
@@ -7,7 +7,7 @@ This is the scaffolding. It can hold a conversation on WhatsApp and remember the
 ## How it works
 
 ```
-WhatsApp ──webhook──▶ Worker   build40for40.com/day7/api/whatsapp
+WhatsApp ──webhook──▶ Worker   build40for40.com/poppy/api/whatsapp
                         1. check Meta's signature on the raw body
                         2. hand each message to its sender's Durable Object, answer 200
                               ▼
@@ -78,7 +78,7 @@ cloudflared prints a `https://<random words>.trycloudflare.com` address. It chan
 ### 4. Point Meta at it
 
 1. In the Meta dashboard, open **WhatsApp > Configuration**.
-2. **Callback URL:** the tunnel address followed by `/day7/api/whatsapp`.
+2. **Callback URL:** the tunnel address followed by `/poppy/api/whatsapp`.
 3. **Verify token:** the same string you put in `WHATSAPP_VERIFY_TOKEN`.
 4. Press **Verify and save**. Meta calls the Worker once, and `npm run dev` logs a `GET` that answered 200.
 5. Under **Webhook fields**, subscribe to `messages`.
@@ -97,22 +97,11 @@ To see memory work without waiting half an hour, lower `IDLE_MINUTES` in `src/br
 
 | What you see | Why |
 | --- | --- |
-| **Verify and save** fails | The tunnel address is stale, the path isn't `/day7/api/whatsapp`, or the verify token doesn't match `.dev.vars` |
+| **Verify and save** fails | The tunnel address is stale, the path isn't `/poppy/api/whatsapp`, or the verify token doesn't match `.dev.vars` |
 | A `POST` logs `401` | `WHATSAPP_APP_SECRET` is wrong. It's the App secret, not the access token |
 | A `POST` logs `200` and nothing comes back | Look for `whatsapp_send_failed` in the log. Status 401 means the 24 hour token ran out. Code 131030 means your phone isn't on the recipient list |
 | Nothing is logged at all | The `messages` field isn't subscribed, or the message went to a different number |
 | It replies "I can't reply right now" | `ANTHROPIC_API_KEY` is empty and `ECHO_MODE` is off |
-
-## Renaming it
-
-`day7` is a placeholder until the app has a name. It appears in:
-
-- the folder name of this repo
-- `workers/brain/src/http.ts`: `BASE_PATH`
-- `workers/brain/wrangler.jsonc`: the Worker `name` and both `routes`
-- `workers/brain/package.json`: `name` (then run `npm install` to refresh the lockfile)
-- `README.md`, `AGENTS.md` and `workers/brain/README.md`
-- the callback URL saved in the Meta dashboard
 
 ## Not done yet
 

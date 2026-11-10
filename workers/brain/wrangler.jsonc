@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "day7-brain",
+  "name": "poppy-brain",
   "account_id": "9b4d3e616e55585a0ae844f424717b43",
   "compatibility_date": "2026-11-04",
   "main": "src/index.ts",
@@ -18,8 +18,8 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UserBrain"] }],
   "routes": [
-    { "pattern": "build40for40.com/day7/api", "zone_name": "build40for40.com" },
-    { "pattern": "build40for40.com/day7/api/*", "zone_name": "build40for40.com" }
+    { "pattern": "build40for40.com/poppy/api", "zone_name": "build40for40.com" },
+    { "pattern": "build40for40.com/poppy/api/*", "zone_name": "build40for40.com" }
   ],
   "workers_dev": false,
   "preview_urls": false,

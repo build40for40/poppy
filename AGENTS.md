@@ -1,4 +1,4 @@
-# Day 7 (placeholder name)
+# Poppy
 
 Day 7 of 40 for 40, built live on Twitch on Tuesday 10 November 2026. This repo is the scaffolding only. The problem, the guests and every product decision come later, so nothing here assumes what the assistant is for.
 
@@ -26,4 +26,3 @@ Don't record product, design or prompt choices here until the team has made them
 - What's worth remembering about someone, and which notes the reflection files beyond one per conversation
 - Whether it reads voice notes or images
 - Whether it ever messages first (WhatsApp only allows approved, paid templates outside 24 hours of the person's last message)
-- The repo and app name. `day7` is a placeholder, and `README.md` lists every place it appears

@@ -1,5 +1,5 @@
 {
-  "name": "@day7/brain",
+  "name": "@poppy/brain",
   "version": "0.0.0",
   "private": true,
   "description": "A WhatsApp assistant that remembers: a Worker in front of one UserBrain Durable Object per user.",

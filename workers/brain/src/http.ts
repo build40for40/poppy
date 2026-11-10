@@ -1,5 +1,4 @@
-/** `day7` is a placeholder name. The README lists every place to change when the app gets its real one. */
-export const BASE_PATH = "/day7/api";
+export const BASE_PATH = "/poppy/api";
 
 export function json(body: unknown, status = 200, headers?: HeadersInit): Response {
   return Response.json(body, { status, headers });

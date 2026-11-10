@@ -6,7 +6,7 @@ It's the Sous brain (Day 5) with the cooking removed and WhatsApp put where the 
 
 ## Routes
 
-Everything lives under `/day7/api`. There is one path.
+Everything lives under `/poppy/api`. There is one path.
 
 | route | does |
 | --- | --- |
