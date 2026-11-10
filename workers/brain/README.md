@@ -122,6 +122,7 @@ One thing to know: a message that arrives while a reflection is running waits fo
 | `TWILIO_WHATSAPP_FROM` | secret | The sender, as `whatsapp:+` then the number. Several senders go in one value, separated by commas. Messages to any other number are ignored, and each person is answered from the number they wrote to |
 | `PUBLIC_BASE_URL` | var | Only for Twilio behind a tunnel: the tunnel's address, so the signature check knows the URL Twilio called |
 | `TWILIO_REPLY_INLINE` | var | `true` sends the reply to a Twilio message back in the webhook's own answer, as TwiML, and not through Twilio's API. On for now, because the Twilio account can't send through the API until its compliance profile is approved |
+| `WEB_CHAT` | var | `true` switches on the landing page's demo chat at `POST /poppy/api/web`. It takes `{ "id": "<uuid the browser made>", "text": "<up to 500 characters>" }` and answers `{ "replies": [{ "text", "picture" }], "left" }`. Nobody signs it, so it's capped: 10 messages per visitor (`429 visitor_limit`), 500 a day across everyone (`429 daily_limit`, counted by the `WebGate` object), and each visitor's brain is deleted a day after their first message. A demo chat is never reflected on or nudged |
 | `WHATSAPP_API_VERSION` | var | The Graph API version, `v27.0` |
 | `LIVE_MODEL` | var | The model for live turns. New sessions pick up a change; open ones keep theirs |
 | `ECHO_MODE` | var | `true` sends the person's own text back and never calls Claude |

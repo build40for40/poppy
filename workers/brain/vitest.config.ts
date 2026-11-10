@@ -13,6 +13,7 @@ export default defineConfig({
         bindings: {
           ECHO_MODE: "",
           TWILIO_REPLY_INLINE: "",
+          WEB_CHAT: "",
           DEV_TOOLS: "",
           WHATSAPP_API_BASE: "",
           IDLE_MINUTES: "",
