@@ -9,7 +9,7 @@
 <style>
   /* Layout: the page is one chat between Poppy and a mum. The chat is pinned to the screen and the page behind it is tall. Scrolling down brings in the next message, scrolling up fades it away again. The conversation is the plain text block at the bottom. */
   :root {
-    --page: #e8402a; --ink: #2b1230; --bezel: #1a0b1e; --bezel-edge: #43294a;
+    --page: #e8402a; --ink: #2b1230; --pitch-ink: #2b1230; --bezel: #1a0b1e; --bezel-edge: #43294a;
     --chat-bg: #efe7dd; --me: #d9fdd3; --them: #ffffff; --chat-ink: #1f2c33; --chat-soft: #667781; --tick: #53bdeb;
     --bar: #ffffff; --bar-line: #e0d6cb; --chip: #ffffff; --chip-ink: #2b1230; --chip-line: #2b1230;
     --sun: #ffd23f; --sun-ink: #3a2a00; --poppy: #e8402a; --poppy-ink: #fff6f2;
@@ -18,7 +18,7 @@
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --page: #1c0f20; --ink: #f6eefa; --bezel: #0d0610; --bezel-edge: #7a6283;
+      --page: #1c0f20; --ink: #f6eefa; --pitch-ink: #f6eefa; --bezel: #0d0610; --bezel-edge: #7a6283;
       --chat-bg: #0b141a; --me: #005c4b; --them: #202c33; --chat-ink: #e9edef; --chat-soft: #8696a0; --tick: #53bdeb;
       --bar: #202c33; --bar-line: #2f3b43; --chip: #202c33; --chip-ink: #e9edef; --chip-line: #8696a0;
       --sun: #ffd23f; --sun-ink: #3a2a00; --poppy: #d93a25; --poppy-ink: #fff6f2;
@@ -26,7 +26,7 @@
     }
   }
   :root[data-theme="dark"] {
-    --page: #1c0f20; --ink: #f6eefa; --bezel: #0d0610; --bezel-edge: #7a6283;
+    --page: #1c0f20; --ink: #f6eefa; --pitch-ink: #f6eefa; --bezel: #0d0610; --bezel-edge: #7a6283;
     --chat-bg: #0b141a; --me: #005c4b; --them: #202c33; --chat-ink: #e9edef; --chat-soft: #8696a0; --tick: #53bdeb;
     --bar: #202c33; --bar-line: #2f3b43; --chip: #202c33; --chip-ink: #e9edef; --chip-line: #8696a0;
     --sun: #ffd23f; --sun-ink: #3a2a00; --poppy: #d93a25; --poppy-ink: #fff6f2;
@@ -58,12 +58,24 @@
   }
   :focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
 
-  .head { background: var(--poppy); color: var(--poppy-ink); display: flex; align-items: center; gap: 12px; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .head { background: var(--poppy); color: var(--poppy-ink); display: flex; align-items: center; gap: 12px; padding-block: 7px 9px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   .head svg { width: 40px; height: 40px; flex: none; }
   .head .name { font-family: var(--display); font-weight: 800; font-size: 22px; line-height: 1.1; letter-spacing: -0.01em; }
-  .head .status { font-size: 13px; opacity: 0.92; }
+  .head .status { font-size: 13px; opacity: 0.95; }
+  .head .status em, .pitch em { font-style: normal; background: var(--sun); color: var(--sun-ink); padding: 0 0.22em; border-radius: 0.2em; white-space: nowrap; }
+  .head .wide { display: none; }
+  /* The headline. Beside the phone on wide screens; on a phone it sits in the chat header instead, where a contact's status goes. */
+  .pitch { display: none; }
+  @media (min-width: 900px) {
+    .stage { gap: clamp(40px, 6vw, 96px); }
+    .pitch { display: block; flex: 0 1 430px; color: var(--pitch-ink); }
+    .pitch h1 { margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(40px, 4.6vw, 66px); line-height: 1.02; letter-spacing: -0.025em; text-wrap: balance; }
+    .pitch p { margin: 18px 0 0; font-size: 19px; line-height: 1.4; max-width: 22em; }
+    .head .wide { display: inline; }
+    .head .narrow { display: none; }
+  }
 
-  .log { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding-block: 14px; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); }
+  .log { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding-block: 8px 4px; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); }
   .msg { max-width: 84%; padding: 8px 10px 5px; border-radius: 10px; overflow-wrap: anywhere; }
   .msg.them { align-self: flex-start; background: var(--them); border-top-left-radius: 2px; }
   .msg.me { align-self: flex-end; background: var(--me); border-top-right-radius: 2px; }
@@ -71,7 +83,7 @@
   .row.on { grid-template-rows: 1fr; opacity: 1; transform: none; }
   .row > .in { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
   .row > .in > * { margin-bottom: 6px; }
-  .row.turn > .in { padding-top: 6px; }
+  .row.turn > .in > :first-child { margin-top: 6px; } /* a margin, not padding on .in: padding would still take up room while the row is folded away */
   .still .row { transition: none; }
   @media (prefers-reduced-motion: reduce) { .row { transition: none; transform: none; } }
   .msg strong { font-weight: 700; }
@@ -82,11 +94,11 @@
   .big em { font-style: normal; background: var(--sun); color: var(--sun-ink); padding: 0 0.14em; border-radius: 0.14em; }
   .day { align-self: center; background: var(--them); color: var(--chat-soft); font-size: 12px; padding: 4px 12px; border-radius: 8px; margin: 8px 0 14px; }
   /* A suggestion: a picture with the words as its caption, the way WhatsApp shows a photo message. */
-  .msg.card { width: 84%; padding: 3px 3px 5px; }
-  .card .pic { display: block; width: 100%; height: auto; border-radius: 8px; border-top-left-radius: 1px; }
+  .msg.card { width: 90%; max-width: 90%; padding: 3px 3px 5px; line-height: 1.36; }
+  .card .pic { display: block; width: 100%; height: auto; aspect-ratio: 600 / 232; border-radius: 8px; border-top-left-radius: 1px; } /* shown a little cropped at the top (empty wall), the way WhatsApp crops a photo, so the whole card fits one screen */
   .card .cap { padding: 7px 7px 0; }
   .card .meta { padding-right: 7px; }
-  .p + .p { margin-top: 9px; }
+  .p + .p { margin-top: 7px; }
   .dot { display: block; padding-left: 0.95em; text-indent: -0.95em; }
   .voice { display: flex; align-items: center; gap: 10px; min-width: 200px; }
   .play { width: 0; height: 0; border-left: 14px solid var(--chat-soft); border-top: 9px solid transparent; border-bottom: 9px solid transparent; flex: none; }
@@ -101,13 +113,15 @@
   @keyframes bob { 0%, 60%, 100% { opacity: 0.35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
   @media (prefers-reduced-motion: reduce) { .typing i { animation: none; } }
 
-  .bar { background: var(--bar); border-top: 1px solid var(--bar-line); padding-block: 10px 12px; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 8px; }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; min-height: 44px; align-items: center; }
+  .bar { background: var(--bar); border-top: 1px solid var(--bar-line); padding-block: 8px 8px; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 4px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; min-height: 40px; align-items: center; }
   .chip { font: inherit; font-weight: 500; background: var(--chip); color: var(--chip-ink); border: 1.5px solid var(--chip-line); border-radius: 999px; padding: 9px 16px; cursor: pointer; text-align: left; }
   .chip:hover { background: var(--sun); color: var(--sun-ink); border-color: var(--sun); }
   .chip.go { background: var(--sun); color: var(--sun-ink); border-color: var(--sun); font-weight: 700; text-decoration: none; display: inline-block; }
-  .hint { color: var(--chat-soft); font-size: 14px; display: flex; align-items: center; gap: 8px; }
-  .hint i { width: 9px; height: 9px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); margin-top: -4px; }
+  .hint { color: var(--chat-ink); font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .hint i { width: 9px; height: 9px; border-right: 2.5px solid var(--poppy); border-bottom: 2.5px solid var(--poppy); transform: rotate(45deg); margin: -4px 2px 0 4px; animation: nudge 1.4s infinite ease-in-out; }
+  @keyframes nudge { 0%, 100% { translate: 0 -2px; } 50% { translate: 0 3px; } }
+  @media (prefers-reduced-motion: reduce) { .hint i { animation: none; } }
   .note { font-size: 12px; color: var(--chat-soft); }
 </style>
 </head>
@@ -115,6 +129,10 @@
 
 <div class="track" id="track">
 <div class="stage">
+<div class="pitch">
+  <h1>You need a minute. I've got <em>one idea</em>.</h1>
+  <p>Poppy lives in WhatsApp. Tell her it's all kicking off and she sends one thing to do.</p>
+</div>
 <div class="phone">
 <div class="cam" aria-hidden="true"></div>
 <div class="app">
@@ -129,15 +147,15 @@
     <svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="17" fill="#2b1230"/><g fill="#ffd23f"><circle cx="17" cy="10.5" r="5"/><circle cx="23.5" cy="17" r="5"/><circle cx="17" cy="23.5" r="5"/><circle cx="10.5" cy="17" r="5"/></g><circle cx="17" cy="17" r="3.6" fill="#e8402a"/></svg>
     <div>
       <div class="name">Poppy</div>
-      <div class="status">online, and not judging</div>
+      <div class="status"><span class="narrow">You need a minute. I've got <em>one idea</em>.</span><span class="wide">online, and not judging</span></div>
     </div>
   </div>
 
   <div class="log" id="log"></div>
 
   <div class="bar">
-    <div class="chips" id="chips"><span class="hint"><i></i>Scroll to read on</span></div>
-    <div class="note">Poppy's real message shapes, with a made up family. She lives in WhatsApp.</div>
+    <div class="chips" id="chips"><span class="hint"><i></i>Scroll to see how it went</span></div>
+    <div class="note">Poppy's real messages. A made up family.</div>
   </div>
   <div class="home" aria-hidden="true"><i></i></div>
 </div>
@@ -158,12 +176,12 @@
 
   ONE LINE, ONE MESSAGE
 
-    big: text            Poppy, in the large headline style
     poppy: text          a message from Poppy. Her check-in question and her "Saved" replies are just this
     mum: text            a message from the mum
     --- text             a divider across the chat, such as "Two days later"
     time: 10:31          sets the clock shown on the messages that follow (UK time)
-    show: 2              how many messages are already there before any scrolling (first line only)
+    show: 2              how many messages make up the first screen, before any scrolling (first line only).
+                         The first is there straight away. The rest arrive by themselves, Poppy's after a second of "typing"
     # text               a note to yourself, never shown
 
   A SUGGESTION (several lines, one message). Start with card: and put the rest straight under it.
@@ -191,31 +209,25 @@
 
     voice 0:14: text     a voice note from the mum, 14 seconds long, with what she said underneath
     log: text            a "Logged" note inside Poppy's next message
+    big: text            Poppy, in a large headline style. The headline now lives outside the chat, in the page itself, not in this block
 -->
 <script type="text/plain" id="script">
 show: 2
 
-time: 10:30
-big: Hi, I'm Poppy. You need a minute. I've got *one idea*.
-poppy: This is Anastasia. Her daughter Maya is three and it is all kicking off. Scroll to see what happened.
-
-# 1. The suggestion. On a first chat Poppy needs the child's age and where they are before she suggests anything
+# 1. The suggestion. This is the first screen. Poppy already knows Maya from before: she's 3 and Frozen mad
 time: 10:31
-mum: Poppy, help. Maya is climbing the walls and I need to sit down.
-poppy: On it. How old is Maya?
-mum: 3. We're at home. She only cares about Frozen, and all I can find is a Frozen colouring book and some coloured pencils.
+mum: Help. Maya is climbing the walls. We're at home with her Frozen colouring book and some pencils.
 
-time: 10:32
 card: Elsa's ball gown
 picture: painting
 setup: 2 min to set up · keeps Maya busy for about 20 min
-grab: the Frozen colouring book, the coloured pencils
-then: open the book on the table at a page with Elsa on it, and tell Maya the ball is tonight and the dress has no colour yet.
-why: Colouring builds her pencil grip, and it's wall to wall Frozen, so it should hold her while you sit down.
+grab: the Frozen colouring book, the pencils
+then: open it at a page with Elsa on it, and tell Maya the ball is tonight and the dress has no colour yet.
+why: Maya would do anything for Elsa, and colouring builds her pencil grip, so it should hold her while you sit down.
 last: Tell me how it goes, or ask for something different.
 
 # 2. The review. Poppy asks once, an hour after the activity was meant to end
-time: 11:52
+time: 11:51
 poppy: How did "Elsa's ball gown" go? Tell me how long it lasted and what they made of it, and I'll remember for next time.
 mum: Five minutes. Then she threw the book across the room and said her first swear word. It rhymes with duck.
 poppy: Oh no. Saved: not a hit, 5 minutes, one new word. Was it the colouring, or just the moment?
@@ -263,7 +275,7 @@ poppy: Send */forget* and I delete everything I know about you. My WhatsApp numb
       el.className = 'msg ' + who + (extra ? ' ' + extra : '');
       el.innerHTML = html + '<span class="meta">' + esc(clock) + (who === 'me' ? ' <b>&check;&check;</b>' : '') + '</span>';
     }
-    row.setAttribute('data-clock', clock);
+    row.setAttribute('data-clock', clock); row.setAttribute('data-who', who);
     inner.appendChild(el); row.appendChild(inner); log.appendChild(row); rows.push(row);
   }
 
@@ -282,7 +294,7 @@ poppy: Send */forget* and I delete everything I know about you. My WhatsApp numb
       var why = [s('why'), s('safety')].filter(Boolean).join(' ');
       var cap = '<div class="cap">' + para(top) + para(steps) + para(why) + para(s('last')) + '</div>';
       if (!pic) return add('them', para(top) + para(steps) + para(why) + para(s('last'))); // no picture, so it goes as a plain message, as Poppy does
-      var svg = pic.cloneNode(true); svg.setAttribute('class', 'pic');
+      var svg = pic.cloneNode(true); svg.setAttribute('class', 'pic'); svg.setAttribute('preserveAspectRatio', 'xMidYMax slice');
       add('them', svg.outerHTML + cap, 'card');
     } else {
       var list = b.items.map(function (t) { return '<span class="dot">&bull; ' + rich(t, 'strong') + '</span>'; }).join('');
@@ -316,6 +328,24 @@ poppy: Send */forget* and I delete everything I know about you. My WhatsApp numb
   track.style.height = 'calc(100vh + ' + (steps * STEP + 40) + 'px)';
   track.style.height = 'calc(100dvh + ' + (steps * STEP + 40) + 'px)';
 
+  // The first screen arrives by itself: the first message is there, then each of the others turns up after a pause, Poppy's behind a typing bubble.
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var ready = show, timer = 0;
+  var typing = document.createElement('div');
+  typing.className = 'row turn';
+  typing.innerHTML = '<div class="in"><div class="typing" role="img" aria-label="Poppy is typing"><i></i><i></i><i></i></div></div>';
+  function stopTyping() { typing.classList.remove('on'); if (typing.parentNode) typing.parentNode.removeChild(typing); }
+  function arrived() { ready++; shown = -1; update(); next(); }
+  function next() {
+    if (ready >= show) return;
+    var row = rows[ready];
+    if (row.getAttribute('data-who') !== 'them') { timer = setTimeout(arrived, 700); return; }
+    timer = setTimeout(function () {
+      log.insertBefore(typing, row); void typing.offsetHeight; typing.classList.add('on');
+      timer = setTimeout(function () { stopTyping(); arrived(); }, 1300);
+    }, 500);
+  }
+
   var hint = chips.innerHTML, shown = -1, ended = null;
   function end(on) {
     if (on === ended) return; ended = on;
@@ -328,6 +358,10 @@ poppy: Send */forget* and I delete everything I know about you. My WhatsApp numb
   function update() {
     var y = Math.max(0, window.scrollY - track.offsetTop);
     var n = Math.min(rows.length, show + Math.floor((y + STEP * 0.25) / STEP));
+    if (ready < show) {
+      if (n > show) { clearTimeout(timer); stopTyping(); ready = show; } // scrolled on before the first screen finished arriving
+      else n = ready;
+    }
     if (n !== shown) {
       for (var i = 0; i < rows.length; i++) rows[i].classList.toggle('on', i < n);
       shown = n;
@@ -339,8 +373,9 @@ poppy: Send */forget* and I delete everything I know about you. My WhatsApp numb
   window.addEventListener('scroll', update, { passive: true });
   window.addEventListener('resize', update);
   log.classList.add('still'); // the messages already there at the start appear without animating
+  if (!reduce && show > 1) ready = 1;
   update();
-  setTimeout(function () { log.classList.remove('still'); }, 80);
+  setTimeout(function () { log.classList.remove('still'); next(); }, 80);
 })();
 </script>
 </body>
