@@ -43,10 +43,10 @@
   // The landing page is one HTML file, bundled in as text and served at /poppy.
   "rules": [{ "type": "Text", "globs": ["**/*.html"], "fallthrough": true }],
   "routes": [
-    { "pattern": "build40for40.com/poppy", "zone_name": "build40for40.com" },
-    { "pattern": "build40for40.com/poppy/", "zone_name": "build40for40.com" },
-    { "pattern": "build40for40.com/poppy/api", "zone_name": "build40for40.com" },
-    { "pattern": "build40for40.com/poppy/api/*", "zone_name": "build40for40.com" }
+    // One pattern with the star at the end, because a route is matched against the whole address, query string included:
+    // "/poppy" on its own doesn't match "/poppy?fbclid=…", which is how shared links arrive. It covers the landing page,
+    // /poppy/ and everything under /poppy/api. Any other path gets the Worker's own 404.
+    { "pattern": "build40for40.com/poppy*", "zone_name": "build40for40.com" }
   ],
   "workers_dev": false,
   "preview_urls": false,
