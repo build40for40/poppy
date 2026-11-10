@@ -1,5 +1,5 @@
 import { env, exports } from "cloudflare:workers";
-import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
+import { createExecutionContext, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IDLE_MINUTES, REFLECTION_RETRY_MINUTES, REPLIES, TURN_CAP, type UserBrain } from "./brain";
 import { BASE_PATH } from "./http";
@@ -537,7 +537,7 @@ describe("the dev tools", () => {
     const raw = JSON.stringify({ user_id: ALICE.userId, ...body });
     return new Request(DEV_URL, { method: "POST", headers: { "X-Hub-Signature-256": await sign(raw, env.WHATSAPP_APP_SECRET) }, body: raw });
   };
-  const withTools = (r: Request) => worker.fetch(r as Parameters<typeof worker.fetch>[0], { ...env, DEV_TOOLS: "true" });
+  const withTools = (r: Request) => worker.fetch(r as Parameters<typeof worker.fetch>[0], { ...env, DEV_TOOLS: "true" }, createExecutionContext());
   const dev = async (body: Record<string, unknown>) => (await (await withTools(await request(body))).json()) as Record<string, any>;
 
   it("aren't there unless DEV_TOOLS is on: the path is a 404 like any other", async () => {

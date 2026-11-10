@@ -12,7 +12,7 @@ import { starterAbout, starterPreferences } from "./seed";
 import { appendUserText, runTurn } from "./turn";
 import type { Turn } from "./types";
 import { allPictures, shelfOf } from "./shelf";
-import { sendTwilioText, TWILIO_SEND_GAP_MS, twilioSenders } from "./twilio";
+import { sendTwilioText, TWILIO_SEND_GAP_MS, twilioPieces, twilioSenders, type TwilioPiece } from "./twilio";
 import { INTERESTS_MD, londonDate, londonDay, londonTime, nextLondonMidnight, readFile, splitLearned, writeFile, writeReflection } from "./vault";
 import { markReadAndTyping, sendText, WhatsAppError, type Address, type Incoming } from "./whatsapp";
 
@@ -129,6 +129,10 @@ export interface SessionView {
  */
 export class UserBrain extends DurableObject<Env> {
   private ready = false;
+  /** True while the inbox is being answered, by the alarm or by `answerNow`. Two runs can't share the inbox. */
+  private working = false;
+  /** Set while `answerNow` is collecting a Twilio reply to hand back in the webhook's answer. */
+  private inline: { until: number; pieces: TwilioPiece[] } | null = null;
 
   private get sql(): SqlStorage {
     return this.ctx.storage.sql;
@@ -154,6 +158,38 @@ export class UserBrain extends DurableObject<Env> {
   /** Stores one incoming message and wakes the alarm. A message id seen before is dropped, since Meta redelivers webhooks. */
   async receive(message: Incoming): Promise<"queued" | "duplicate"> {
     this.init();
+    if (!this.store(message)) return "duplicate";
+    await this.ctx.storage.setAlarm(Date.now());
+    return "queued";
+  }
+
+  /**
+   * Stores one incoming Twilio message and answers it straight away, handing the reply back for the webhook's own answer
+   * in place of a call to Twilio's API. Only what's ready within `waitMs` comes back, because Twilio stops waiting: anything
+   * later goes through the API as usual. The rest of the alarm's work (ending chats, reflection, the nudge) is left to the alarm.
+   */
+  async answerNow(message: Incoming, waitMs: number): Promise<TwilioPiece[]> {
+    this.init();
+    if (!this.store(message)) return [];
+    // An alarm run is already answering the inbox, so this message joins its next turn and goes out through the API.
+    if (this.working) {
+      await this.ctx.storage.setAlarm(Date.now());
+      return [];
+    }
+    const inline = { until: Date.now() + waitMs, pieces: [] as TwilioPiece[] };
+    this.working = true;
+    this.inline = inline;
+    try {
+      await this.answerInbox();
+    } finally {
+      this.inline = null;
+      this.working = false;
+    }
+    if (this.ready) await this.ctx.storage.setAlarm(Date.now());
+    return inline.pieces;
+  }
+
+  private store(message: Incoming): boolean {
     const stored = this.sql
       .exec(
         "INSERT INTO inbox (message_id, kind, text, received_at) VALUES (?, ?, ?, ?) ON CONFLICT (message_id) DO NOTHING RETURNING seq",
@@ -163,14 +199,27 @@ export class UserBrain extends DurableObject<Env> {
         new Date().toISOString(),
       )
       .toArray();
-    if (!stored.length) return "duplicate";
+    if (!stored.length) return false;
     this.saveAddress(message);
-    await this.ctx.storage.setAlarm(Date.now());
-    return "queued";
+    return true;
   }
 
   async alarm(): Promise<void> {
     this.init();
+    // `answerNow` is mid-reply. Come back once it's done.
+    if (this.working) {
+      await this.ctx.storage.setAlarm(Date.now() + 1_000);
+      return;
+    }
+    this.working = true;
+    try {
+      await this.work();
+    } finally {
+      this.working = false;
+    }
+  }
+
+  private async work(): Promise<void> {
     const tried = new Set<string>();
     do {
       await this.answerInbox();
@@ -594,7 +643,10 @@ export class UserBrain extends DurableObject<Env> {
       const config = { accountSid, authToken, from, gapMs: TWILIO_SEND_GAP_MS };
       return {
         send: async (to, text, picture) => {
-          if (to.phone) await sendTwilioText(config, to.phone, text, picture);
+          // While the webhook is still waiting, the reply rides back in its answer. After that it goes through the API.
+          const inline = this.inline;
+          if (inline && Date.now() < inline.until) inline.pieces.push(...twilioPieces(text, picture));
+          else if (to.phone) await sendTwilioText(config, to.phone, text, picture);
         },
         // Twilio's sandbox has no read receipt or typing indicator to set.
         markRead: async () => {},

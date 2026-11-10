@@ -1,9 +1,10 @@
 import { env, exports } from "cloudflare:workers";
-import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
+import { createExecutionContext, runDurableObjectAlarm, runInDurableObject, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { REPLIES, type UserBrain } from "./brain";
 import { ALICE as FIXED, brainFor, FAKE_SENDER, fakeSid, fakeTwilioParams, fakeTwilioPerson, mockClaude, mockGraph, mockTwilio, OTHER_FAKE_SENDER, postTwilio, sayAs, sayOnTwilio, sentTexts, TWILIO_WEBHOOK_URL, type GraphMock, type TwilioMock } from "./testing";
-import { incomingTwilioMessage, sendTwilioText, signedUrlCandidates, signTwilio, TWILIO_MAX_CHARS, twilioSenders, verifyTwilioSignature } from "./twilio";
+import worker from "./index";
+import { incomingTwilioMessage, sendTwilioText, signedUrlCandidates, signTwilio, TWILIO_MAX_CHARS, twilioPieces, twilioSenders, twimlReply, verifyTwilioSignature } from "./twilio";
 import { brainName, WhatsAppError, type Address } from "./whatsapp";
 
 let twilio: TwilioMock;
@@ -277,5 +278,84 @@ describe("a person on Twilio", () => {
     await sayOnTwilio(ANNA, "Hi");
     await settle();
     expect(await inBrain(ANNA, (brain) => brain.listSessions()[0].user_turns)).toBe(1);
+  });
+});
+
+describe("twimlReply", () => {
+  it("is an empty response when there's nothing to say", async () => {
+    expect(await twimlReply([]).text()).toBe('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+  });
+
+  it("carries each piece as a message, with the picture beside its caption, and escapes what XML would trip on", async () => {
+    const xml = await twimlReply([{ Body: 'Tom & Jerry <3 "quotes"', MediaUrl: "https://example.com/pictures/toy-bath.png?a=1&b=2" }, { Body: "Second" }, { MediaUrl: "https://example.com/p.png" }]).text();
+    expect(xml).toContain("<Message><Body>Tom &amp; Jerry &lt;3 &quot;quotes&quot;</Body><Media>https://example.com/pictures/toy-bath.png?a=1&amp;b=2</Media></Message>");
+    expect(xml).toContain("<Message><Body>Second</Body></Message><Message><Media>https://example.com/p.png</Media></Message>");
+  });
+
+  it("lays a reply out the same way a send through the API would", () => {
+    expect(twilioPieces("Short", "https://example.com/p.png")).toEqual([{ Body: "Short", MediaUrl: "https://example.com/p.png" }]);
+    expect(twilioPieces("x".repeat(TWILIO_MAX_CHARS + 1))).toHaveLength(2);
+  });
+});
+
+describe("replying inside the webhook's answer", () => {
+  /** The Twilio webhook with TWILIO_REPLY_INLINE on, the way the deployed Worker runs it. */
+  async function sayInline(from: Address, body: string, extra: Record<string, string> = {}): Promise<Response> {
+    const params = fakeTwilioParams(from, body, extra);
+    const request = new Request(TWILIO_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Twilio-Signature": await signTwilio(TWILIO_WEBHOOK_URL, Object.entries(params), env.TWILIO_AUTH_TOKEN) },
+      body: new URLSearchParams(params).toString(),
+    });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request as Parameters<typeof worker.fetch>[0], { ...env, TWILIO_REPLY_INLINE: "true" }, ctx);
+    await waitOnExecutionContext(ctx);
+    return response;
+  }
+
+  it("hands the reply back as TwiML and doesn't call Twilio's API", async () => {
+    const claude = mockClaude(text("Hello <back> & welcome."));
+    const response = await sayInline(ANNA, "Hi");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toContain("text/xml");
+    expect(await response.text()).toContain("<Response><Message><Body>Hello &lt;back&gt; &amp; welcome.</Body></Message></Response>");
+    await settle();
+
+    expect(twilio.requests).toEqual([]);
+    expect(claude.requests).toHaveLength(1);
+    expect(await inBrain(ANNA, (brain) => brain.listSessions()[0].turns.map((t) => t.text))).toEqual(["Hi", "Hello <back> & welcome."]);
+  });
+
+  it("keeps the conversation going across messages, each answered in its own webhook", async () => {
+    const claude = mockClaude(text("One."), text("Two."));
+    expect(await (await sayInline(ANNA, "First")).text()).toContain("<Body>One.</Body>");
+    expect(await (await sayInline(ANNA, "Second")).text()).toContain("<Body>Two.</Body>");
+    expect(twilio.requests).toEqual([]);
+    expect(claude.requests[1].messages).toHaveLength(3);
+  });
+
+  it("answers a repeat delivery with nothing", async () => {
+    mockClaude(text("Once."));
+    const sid = fakeSid();
+    expect(await (await sayInline(ANNA, "Hi", { MessageSid: sid })).text()).toContain("<Body>Once.</Body>");
+    expect(await (await sayInline(ANNA, "Hi", { MessageSid: sid })).text()).toContain("<Response></Response>");
+  });
+
+  it("says /forget worked in the answer, and leaves nothing behind", async () => {
+    mockClaude(text("Hello."));
+    await sayInline(ANNA, "Hi");
+    await settle();
+    const response = await sayInline(ANNA, "/forget");
+    expect(await response.text()).toContain(`<Body>${REPLIES.forgotten.replace("'", "&apos;")}</Body>`);
+    expect(twilio.requests).toEqual([]);
+    expect(await inBrain(ANNA, (_, state) => tables(state))).toEqual([]);
+  });
+
+  it("still sends through the API when the setting is off", async () => {
+    mockClaude(text("Through the API."));
+    const response = await sayOnTwilio(ANNA, "Hi");
+    expect(await response.text()).toContain("<Response></Response>");
+    await settle();
+    expect(bodies()).toEqual(["Through the API."]);
   });
 });
