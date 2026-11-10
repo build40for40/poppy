@@ -52,6 +52,7 @@ describe("applyPlayEvents", () => {
       expect(open).toMatchObject({ activity: "Fake sock sorting", sessionId: "chat-1", minutes: 45, nudgedAt: null });
       expect(open.path).toMatch(/^plays\/2026-11-10-[0-9a-f]{8}\.md$/);
       expect(nudgeDue(open)).toBe(Date.parse("2026-11-10T14:00:00.000Z") + (45 + NUDGE_AFTER_MINUTES) * 60_000);
+      expect(nudgeDue(open, 1)).toBe(Date.parse("2026-11-10T14:46:00.000Z"));
     });
   });
 

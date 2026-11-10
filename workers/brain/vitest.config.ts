@@ -12,6 +12,10 @@ export default defineConfig({
         // These also override anything in a local .dev.vars, so a developer's ECHO_MODE or real keys never reach a test.
         bindings: {
           ECHO_MODE: "",
+          DEV_TOOLS: "",
+          WHATSAPP_API_BASE: "",
+          IDLE_MINUTES: "",
+          NUDGE_AFTER_MINUTES: "",
           ANTHROPIC_API_KEY: "fake-anthropic-api-key",
           WHATSAPP_APP_SECRET: "fake-whatsapp-app-secret",
           WHATSAPP_TOKEN: "fake-whatsapp-token",

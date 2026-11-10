@@ -30,10 +30,14 @@ export interface Incoming extends Address {
   text: string;
 }
 
+const GRAPH_API_BASE = "https://graph.facebook.com";
+
 export interface WhatsAppConfig {
   token: string;
   phoneNumberId: string;
   apiVersion: string;
+  /** Sent to in place of the Graph API, for local runs. */
+  apiBase?: string;
 }
 
 /**
@@ -149,7 +153,8 @@ export async function markReadAndTyping(config: WhatsAppConfig, messageId: strin
 }
 
 async function post(config: WhatsAppConfig, body: unknown): Promise<void> {
-  const response = await fetch(`https://graph.facebook.com/${config.apiVersion}/${config.phoneNumberId}/messages`, {
+  const base = (config.apiBase?.trim() || GRAPH_API_BASE).replace(/\/+$/, "");
+  const response = await fetch(`${base}/${config.apiVersion}/${config.phoneNumberId}/messages`, {
     method: "POST",
     headers: { Authorization: `Bearer ${config.token}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),

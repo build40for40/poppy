@@ -32,6 +32,91 @@ npm test
 
 The tests need no accounts and no keys. Claude, Meta and Twilio are all faked.
 
+## Chat to it in your terminal
+
+The quickest way to try Poppy: no phone, no tunnel, no Meta or Twilio account. All you need is an Anthropic API key. A small script pretends to be WhatsApp on both sides. It sends what you type to the real Worker as a signed webhook, and it catches the replies the Worker would have sent to Meta and prints them.
+
+```
+you type ──▶ npm run chat ──signed fake webhook──▶ npm run dev   (the real Worker, Durable Object, vault and Claude)
+reply printed ◀── npm run chat ◀──────── the Worker's send call
+```
+
+### 1. Secrets
+
+```sh
+cd workers/brain
+npm install
+cp .dev.vars.example .dev.vars
+```
+
+Fill in `.dev.vars`. It's ignored by git.
+
+| Name | What to put |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | A real Claude API key. The only real thing in the file |
+| `WHATSAPP_APP_SECRET` | Anything you make up. The script signs with it and the Worker checks with it |
+| `WHATSAPP_TOKEN` | Anything you make up |
+| `WHATSAPP_VERIFY_TOKEN` | Anything you make up |
+| `WHATSAPP_PHONE_NUMBER_ID` | Anything you make up, for example `100000000000001` |
+| `WHATSAPP_API_BASE` | `http://127.0.0.1:8788`. Replies go here instead of to Meta, and the script listens on this port |
+| `IDLE_MINUTES` | Optional. How long a chat stays open when it's quiet. Empty means 30 |
+| `NUDGE_AFTER_MINUTES` | Optional. How long after an activity was meant to end Poppy asks how it went. Empty means 60 |
+| `DEV_TOOLS` | Optional. `true` switches on `/memory`, `/end` and `/advance`, below |
+
+Leave `ECHO_MODE` empty, or set it to `true` to check the plumbing before you spend any tokens.
+
+### 2. Two terminals
+
+In one:
+
+```sh
+npm run dev
+```
+
+In the other:
+
+```sh
+npm run chat
+```
+
+Type a message, press enter, and Poppy answers. Restart `npm run dev` whenever you change `.dev.vars`.
+
+- **Another family:** `npm run chat -- --as gran` chats as a different made-up sender with its own memory. Use any name you like. The same name always gets the same vault, so you can go back and forth between two families. Only one `npm run chat` can run at a time, because it owns the reply port.
+- **Start again:** send `/forget` and that family's memory is gone.
+- **Where the memory lives:** in `workers/brain/.wrangler/`, so it's still there after you stop both commands. Delete that folder to wipe every family at once.
+
+### 3. Watch memory and the nudge happen
+
+Set `IDLE_MINUTES=1` and `NUDGE_AFTER_MINUTES=1`, restart `npm run dev`, and:
+
+1. Ask for an activity, and say you only need five minutes. That opens a play session.
+2. Go quiet for a minute. The chat ends and the `npm run dev` terminal logs a `brain_reflection` line.
+3. Say hello again. It's a new chat that knows what the last one learned, and that the activity is still waiting for a check-in.
+4. Go quiet again and leave `npm run chat` open. The nudge arrives a minute after the activity was meant to end, so about six minutes after the suggestion. Five minutes is the shortest activity Poppy can plan.
+
+### 4. Or skip the waiting
+
+Set `DEV_TOOLS=true` in `.dev.vars`, restart `npm run dev`, and three more commands work in the chat. The script handles them itself, so Claude never sees them.
+
+| Command | What it does |
+| --- | --- |
+| `/memory` | Prints the whole vault as it is now: every note's path, frontmatter and body. Then one line saying whether a chat is open, which play session is waiting for a check-in and when the next alarm is due |
+| `/memory plays/<file>.md` | Prints that one note |
+| `/end` | Ends the open chat as if it had gone quiet, runs the reflection and says which notes changed, or why the reflection failed |
+| `/advance 45m` | Pretends that much time has passed (`30s`, `45m`, `2h`, `1d`), then runs the alarm, so whatever came due happens: the chat ends and is reflected on, the nudge goes out |
+
+So the whole loop takes seconds: ask for an activity, `/end`, `/memory`, say hello again, `/end`, `/advance 3h`, and there's the nudge.
+
+Two things to know. `/advance` moves the stored times back instead of moving the clock forward, so the open play session's `started_at` changes and shows up under notes changed. And it never brings on the "London day is over" ending, only the quiet one.
+
+`DEV_TOOLS` turns on a route that hands out vault content, at `/poppy/api/dev`. It belongs in `.dev.vars` and nowhere else. Without it that path is a 404 like any other, and that's how the deployed Worker stays.
+
+### What this doesn't test
+
+- How WhatsApp shows a message: the formatting, the line breaks, the length on a phone screen
+- WhatsApp's 24 hour reply window. The script takes a message from Poppy at any time
+- Real delivery failures: an expired token, a number that isn't on the recipient list, Meta being down
+
 There are two ways to get WhatsApp messages in. Meta's own Cloud API is the real one. Twilio's WhatsApp sandbox is the fallback for when a Meta developer account isn't available: it needs no Meta login, and it comes with a shared Twilio number that every tester has to join first. The brain is the same either way, and both can be set up at once.
 
 ## Local sandbox with Meta: chat to it from your own phone
@@ -96,7 +181,7 @@ Message the test number from your phone.
 - Set `ECHO_MODE=` (empty), add `ANTHROPIC_API_KEY`, restart `npm run dev`, and you're talking to Claude.
 - Send `/forget` and it deletes everything it knows about you.
 
-To see memory work without waiting half an hour, lower `IDLE_MINUTES` in `src/brain.ts` to `1` while you play. Chat, wait a minute or two for the reflection, then say hello again. Don't commit that change.
+To see memory work without waiting half an hour, set `IDLE_MINUTES=1` in `.dev.vars` and restart `npm run dev`. Chat, wait a minute or two for the reflection, then say hello again.
 
 ### When it doesn't work
 

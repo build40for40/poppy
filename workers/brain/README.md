@@ -15,6 +15,8 @@ Everything lives under `/poppy/api`. There is one path per provider.
 
 | `POST /twilio` | Twilio's webhook, one message per request as form fields. Checks `X-Twilio-Signature`, hands the message to its sender's Durable Object and answers `200` with empty TwiML. `401 bad_signature`, `413 body_too_large`, `503 twilio_unavailable` if the auth token isn't set |
 
+| `POST /dev` | Local only. Exists while `DEV_TOOLS` is `true`, and is a `404 not_found` like any unknown path otherwise. Takes the webhook's signature and a JSON body naming a sender and a command: `memory` returns the vault, `end` ends the open chat and reflects, `advance` moves the stored times back and runs the alarm. It returns vault content and logs none of it |
+
 There's no API for a person to call. Nobody signs in: the only way in is a webhook Meta or Twilio signed. Neither provider's secrets are required, so either can run without the other.
 
 ## From a message to a reply
@@ -109,8 +111,12 @@ One thing to know: a message that arrives while a reflection is running waits fo
 | `WHATSAPP_API_VERSION` | var | The Graph API version, `v27.0` |
 | `LIVE_MODEL` | var | The model for live turns. New sessions pick up a change; open ones keep theirs |
 | `ECHO_MODE` | var | `true` sends the person's own text back and never calls Claude |
+| `WHATSAPP_API_BASE` | local only | Where replies go instead of `https://graph.facebook.com`. `npm run chat` listens there |
+| `IDLE_MINUTES` | local only | Minutes of quiet before a chat ends, in place of 30 |
+| `NUDGE_AFTER_MINUTES` | local only | Minutes after an activity's planned end before the nudge, in place of 60 |
+| `DEV_TOOLS` | local only | `true` adds `POST /dev`, which the terminal chat's `/memory`, `/end` and `/advance` call |
 
-For local runs they go in `.dev.vars` (copy `.dev.vars.example`). The root README has the runbook for each provider.
+For local runs they go in `.dev.vars` (copy `.dev.vars.example`). The root README has the runbook for each provider. The four marked local only exist for the terminal chat (`npm run chat`, `scripts/chat.mjs`). They're never set in `wrangler.jsonc` or by the deploy workflow, and a timing that's empty or isn't a positive number falls back to the constant.
 
 The secrets are typed by hand in `src/env.d.ts`, because `wrangler.jsonc` lists none as required. `npm run types` regenerates `worker-configuration.d.ts`; it also reads `.dev.vars`, so move that file aside while it runs to keep the result the same on every machine.
 
@@ -130,3 +136,4 @@ The secrets are typed by hand in `src/env.d.ts`, because `wrangler.jsonc` lists 
 | `src/vault.ts`, `src/wikilinks.ts` | Notes, sections, links, London dates |
 | `src/schema.ts`, `src/seed.ts` | Migrations and the starter `USER.md` |
 | `src/testing.ts` | Fake Claude, fake Meta, fake Twilio, fake people and signed fake webhooks |
+| `scripts/chat.mjs` | The terminal chat: plays Meta on both sides of a Worker running under `npm run dev` |

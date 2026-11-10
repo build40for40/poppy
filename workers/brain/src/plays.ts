@@ -82,8 +82,8 @@ export function openPlay(sql: SqlStorage): OpenPlay | null {
 }
 
 /** When to ask how it went: after the time the activity was meant to fill, plus a while for the parent to say so unprompted. */
-export function nudgeDue(play: OpenPlay): number {
-  return Date.parse(play.startedAt) + (play.minutes + NUDGE_AFTER_MINUTES) * 60_000;
+export function nudgeDue(play: OpenPlay, afterMinutes = NUDGE_AFTER_MINUTES): number {
+  return Date.parse(play.startedAt) + (play.minutes + afterMinutes) * 60_000;
 }
 
 export function markNudged(sql: SqlStorage, path: string, now: string): void {
