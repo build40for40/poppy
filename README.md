@@ -7,8 +7,9 @@ This is the scaffolding. It can hold a conversation on WhatsApp and remember the
 ## How it works
 
 ```
-WhatsApp ──webhook──▶ Worker   build40for40.com/poppy/api/whatsapp
-                        1. check Meta's signature on the raw body
+WhatsApp ──webhook──▶ Worker   build40for40.com/poppy/api/whatsapp   (Meta)
+                               build40for40.com/poppy/api/twilio     (Twilio sandbox, the fallback)
+                        1. check the provider's signature on the raw body
                         2. hand each message to its sender's Durable Object, answer 200
                               ▼
                       UserBrain Durable Object, one per person
@@ -27,9 +28,11 @@ npm run typecheck
 npm test
 ```
 
-The tests need no accounts and no keys. Claude and WhatsApp are both faked.
+The tests need no accounts and no keys. Claude, Meta and Twilio are all faked.
 
-## Local sandbox: chat to it from your own phone
+There are two ways to get WhatsApp messages in. Meta's own Cloud API is the real one. Twilio's WhatsApp sandbox is the fallback for when a Meta developer account isn't available: it needs no Meta login, and it comes with a shared Twilio number that every tester has to join first. The brain is the same either way, and both can be set up at once.
+
+## Local sandbox with Meta: chat to it from your own phone
 
 You need a Meta developer account, [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) (`brew install cloudflared`) and, for real replies, an Anthropic API key. It takes about an hour the first time.
 
@@ -103,8 +106,62 @@ To see memory work without waiting half an hour, lower `IDLE_MINUTES` in `src/br
 | Nothing is logged at all | The `messages` field isn't subscribed, or the message went to a different number |
 | It replies "I can't reply right now" | `ANTHROPIC_API_KEY` is empty and `ECHO_MODE` is off |
 
+## Local sandbox with Twilio: the fallback
+
+You need a Twilio account (a free trial is enough), [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) and, for real replies, an Anthropic API key.
+
+### 1. Twilio console
+
+1. Sign up at [twilio.com/try-twilio](https://www.twilio.com/try-twilio) and verify your email and phone.
+2. Open the WhatsApp Sandbox: **Messaging > Try it out > Send a WhatsApp message**. If your console doesn't show it, switch to the legacy Console, which is where Twilio keeps the Sandbox.
+3. The page shows the sandbox number and a join code. From your own phone, send `join <the code>` to that number on WhatsApp. The sandbox answers to confirm.
+4. From the console's account page, note the **Account SID** and the **Auth Token**.
+
+### 2. Secrets
+
+Add these to `workers/brain/.dev.vars`:
+
+| Name | What it is |
+| --- | --- |
+| `TWILIO_ACCOUNT_SID` | The Account SID, starting `AC` |
+| `TWILIO_AUTH_TOKEN` | The Auth Token. It signs every webhook and sends every reply |
+| `TWILIO_WHATSAPP_FROM` | The sandbox sender, written the way Twilio does: `whatsapp:+` then the sandbox number with no spaces |
+| `PUBLIC_BASE_URL` | The tunnel address from the next step, for example `https://<random words>.trycloudflare.com`. Twilio signs the address it called, and behind a tunnel the Worker can't see that address on its own |
+| `ECHO_MODE` | `true` to start with, as above |
+
+### 3. Run it and open a tunnel
+
+The same two commands as for Meta: `npm run dev`, then `cloudflared tunnel --url http://localhost:8787`. Put the tunnel address in `PUBLIC_BASE_URL` and restart `npm run dev`. When the tunnel restarts the address changes, and both `PUBLIC_BASE_URL` and the console need the new one.
+
+### 4. Point Twilio at it
+
+1. In the console, open **Sandbox settings**.
+2. **When a message comes in:** the tunnel address followed by `/poppy/api/twilio`, method **POST**.
+3. Save.
+
+### 5. Say hello
+
+Message the sandbox number from the phone that joined. Echo mode, real replies and `/forget` work as they do with Meta.
+
+### What's different on the sandbox
+
+- **Everyone joins first.** Each tester sends the join code from their own phone. The join lasts three days, then they send it again.
+- **It's Twilio's number,** shared with other Twilio customers and shown with Twilio's logo.
+- **Text only, like Meta for now.** A voice note or photo gets a "text only for now" reply.
+- **Shorter, slower messages.** One message holds 1,600 characters, and the sandbox sends one message every three seconds, so a long reply arrives in pieces a few seconds apart.
+- **A trial account covers 100 WhatsApp messages.**
+
+### When it doesn't work
+
+| What you see | Why |
+| --- | --- |
+| A `POST` logs `503` | `TWILIO_AUTH_TOKEN` is empty, or `npm run dev` wasn't restarted after editing `.dev.vars` |
+| A `POST` logs `401` | `PUBLIC_BASE_URL` isn't the current tunnel address, the URL saved in Twilio isn't exactly the tunnel address plus `/poppy/api/twilio`, or the Auth Token is wrong |
+| A `POST` logs `200` and nothing comes back | Look for `whatsapp_send_failed` in the log. Code 63015 means that phone hasn't joined the sandbox, or its join ran out. `provider_not_configured` means `TWILIO_ACCOUNT_SID` or `TWILIO_WHATSAPP_FROM` is empty |
+| Nothing is logged at all | The message went to a different number, or the sandbox URL wasn't saved |
+
 ## Not done yet
 
-- A deployed Worker. CI checks every push, and the deploy workflow is manual until the Meta secrets exist
+- A deployed Worker. CI checks every push, and the deploy workflow is manual until a provider's secrets exist
 - A permanent access token (a System User in Meta Business Manager) to replace the 24 hour one
 - Everything marked `TODO(product)`

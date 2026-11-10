@@ -16,7 +16,12 @@ const MEDIA_TYPES = new Set(["image", "audio", "video", "document", "sticker", "
 export interface Address {
   phone: string | null;
   userId: string | null;
+  /** Who carried the message. Left out, it's Meta's Cloud API. */
+  provider?: Provider;
 }
+
+/** The two ways a WhatsApp message can reach us: Meta's Cloud API, or Twilio's WhatsApp sandbox as the fallback. */
+export type Provider = "meta" | "twilio";
 
 export interface Incoming extends Address {
   /** WhatsApp's message id (`wamid...`), used to drop repeat deliveries and to mark the message read. */
@@ -31,9 +36,13 @@ export interface WhatsAppConfig {
   apiVersion: string;
 }
 
-/** The one id a person is known by: the business-scoped user id when Meta sends one, their number otherwise. */
+/**
+ * The one id a person is known by: the business-scoped user id when Meta sends one, their number otherwise. Someone who
+ * arrives through Twilio gets a prefix, so the same number on the two providers is never mistaken for one brain.
+ */
 export function identityOf(address: Address): string {
-  return address.userId ?? address.phone ?? "";
+  const id = address.userId ?? address.phone ?? "";
+  return address.provider === "twilio" ? `twilio:${id}` : id;
 }
 
 /** The name of a person's Durable Object: a hash, so no phone number ends up in an object name or a log line. */

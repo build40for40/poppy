@@ -8,11 +8,17 @@
     "LIVE_MODEL": "claude-sonnet-5-5",
     "WHATSAPP_API_VERSION": "v27.0",
     // "true" replies with the user's own text and never calls Claude. Set it in .dev.vars to test the WhatsApp round trip.
-    "ECHO_MODE": ""
+    "ECHO_MODE": "",
+    // Only for Twilio behind a tunnel: the tunnel's address, so the signature check knows the URL Twilio called.
+    "PUBLIC_BASE_URL": ""
   },
-  "secrets": {
-    "required": ["ANTHROPIC_API_KEY", "WHATSAPP_APP_SECRET", "WHATSAPP_TOKEN", "WHATSAPP_VERIFY_TOKEN", "WHATSAPP_PHONE_NUMBER_ID"]
-  },
+  // Secrets, set with `wrangler secret put` or the deploy workflow, and in .dev.vars locally:
+  //   ANTHROPIC_API_KEY
+  //   Meta:   WHATSAPP_APP_SECRET, WHATSAPP_TOKEN, WHATSAPP_VERIFY_TOKEN, WHATSAPP_PHONE_NUMBER_ID
+  //   Twilio: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM
+  // There's no "secrets.required" list on purpose. Messages come in through Meta or through Twilio, so neither provider's
+  // secrets can be required, and a list would stop `wrangler dev` loading the unlisted ones from .dev.vars. A route answers
+  // 503 until its own are set. They're typed in src/env.d.ts.
   "durable_objects": {
     "bindings": [{ "name": "USER_BRAIN", "class_name": "UserBrain" }]
   },

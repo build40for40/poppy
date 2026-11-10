@@ -1,19 +1,21 @@
 # Brain
 
-A Cloudflare Worker in front of one `UserBrain` Durable Object per person, each with its own SQLite. The Worker takes Meta's WhatsApp webhook. The Durable Object holds what the assistant knows about that person, talks to Claude and sends the replies.
+A Cloudflare Worker in front of one `UserBrain` Durable Object per person, each with its own SQLite. The Worker takes WhatsApp webhooks, from Meta's Cloud API or from Twilio's WhatsApp sandbox as the fallback. The Durable Object holds what the assistant knows about that person, talks to Claude and sends the replies.
 
 It's the Sous brain (Day 5) with the cooking removed and WhatsApp put where the phone app was. Product decisions haven't been made, and every place that waits on one is marked `TODO(product)`.
 
 ## Routes
 
-Everything lives under `/poppy/api`. There is one path.
+Everything lives under `/poppy/api`. There is one path per provider.
 
 | route | does |
 | --- | --- |
 | `GET /whatsapp` | Meta's verify handshake. With `hub.mode=subscribe` and a `hub.verify_token` equal to `WHATSAPP_VERIFY_TOKEN` it answers `200` with `hub.challenge`. Otherwise `403` |
 | `POST /whatsapp` | Meta's webhook. Checks `X-Hub-Signature-256` against the raw body, hands each incoming message to its sender's Durable Object and answers `200`. `401 bad_signature`, `400 invalid_json`, `413 body_too_large`, `503 whatsapp_unavailable` if the app secret isn't set |
 
-There's no API for a person to call. Nobody signs in: the only way in is a webhook Meta signed.
+| `POST /twilio` | Twilio's webhook, one message per request as form fields. Checks `X-Twilio-Signature`, hands the message to its sender's Durable Object and answers `200` with empty TwiML. `401 bad_signature`, `413 body_too_large`, `503 twilio_unavailable` if the auth token isn't set |
+
+There's no API for a person to call. Nobody signs in: the only way in is a webhook Meta or Twilio signed. Neither provider's secrets are required, so either can run without the other.
 
 ## From a message to a reply
 
@@ -25,6 +27,18 @@ There's no API for a person to call. Nobody signs in: the only way in is a webho
 6. **Messages that arrive mid-turn** wait in the inbox and are answered together as the next turn, in the same alarm run.
 
 If the turn fails, the person gets a short apology and nothing is saved, so their next message starts from the same history. If WhatsApp refuses the reply, the turn is still saved and isn't run again.
+
+## Through Twilio instead
+
+The Twilio route does the same job with Twilio's shapes (`src/twilio.ts`):
+
+- **Signature.** `X-Twilio-Signature` is the base64 HMAC SHA-1, under the auth token, of the URL Twilio called followed by every form field's name and value, sorted by name. It's checked against the raw form body before the message is used. The URL is the request's own. Behind a tunnel the Worker sees a different host than Twilio called, so `PUBLIC_BASE_URL` gives a second address to check against. Forwarded-host headers aren't trusted.
+- **The message.** One per request. It must be for our account and our sender number, from a `whatsapp:+…` address. A body is text. Media (voice notes included) and locations are marked unsupported. `incomingTwilioMessage` has the `TODO(product)` where voice-note transcription plugs in.
+- **Repeats.** Twilio's `MessageSid` goes in the same inbox, so a repeat is dropped the same way.
+- **Who they are.** The identity is `twilio:` then the number, hashed, so the same phone on Meta and on Twilio is two separate brains. The object remembers which provider the person's messages come through and replies the same way.
+- **Replies.** Through Twilio's Messages API with the account SID and auth token, split at 1,600 characters. The sandbox sends one message every three seconds, so the pieces of a long reply are sent 3.1 seconds apart (`TWILIO_SEND_GAP_MS`). There's no read receipt or typing indicator.
+
+`/forget`, echo mode, sessions and reflection don't know which provider is in use.
 
 ## Sessions
 
@@ -76,25 +90,33 @@ One thing to know: a message that arrives while a reflection is running waits fo
 | `WHATSAPP_TOKEN` | secret | The access token for sending |
 | `WHATSAPP_VERIFY_TOKEN` | secret | A string we choose, for the verify handshake |
 | `WHATSAPP_PHONE_NUMBER_ID` | secret | The business number's id. Webhooks for any other number are ignored |
+| `TWILIO_ACCOUNT_SID` | secret | The Twilio account. Webhooks for any other account are ignored |
+| `TWILIO_AUTH_TOKEN` | secret | Checks every Twilio webhook's signature and sends every Twilio reply |
+| `TWILIO_WHATSAPP_FROM` | secret | The sender, as `whatsapp:+` then the number. Messages to any other number are ignored |
+| `PUBLIC_BASE_URL` | var | Only for Twilio behind a tunnel: the tunnel's address, so the signature check knows the URL Twilio called |
 | `WHATSAPP_API_VERSION` | var | The Graph API version, `v27.0` |
 | `LIVE_MODEL` | var | The model for live turns. New sessions pick up a change; open ones keep theirs |
 | `ECHO_MODE` | var | `true` sends the person's own text back and never calls Claude |
 
-For local runs they go in `.dev.vars` (copy `.dev.vars.example`). The root README has the runbook.
+For local runs they go in `.dev.vars` (copy `.dev.vars.example`). The root README has the runbook for each provider.
+
+The secrets are typed by hand in `src/env.d.ts`, because `wrangler.jsonc` lists none as required. `npm run types` regenerates `worker-configuration.d.ts`; it also reads `.dev.vars`, so move that file aside while it runs to keep the result the same on every machine.
 
 ## Files
 
 | File | What's in it |
 | --- | --- |
-| `src/index.ts` | The Worker: the two routes |
-| `src/whatsapp.ts` | Signature check, webhook parsing, identity, the send client |
+| `src/index.ts` | The Worker: the routes |
+| `src/whatsapp.ts` | Meta: signature check, webhook parsing, the send client. Also identity and message splitting, shared by both |
+| `src/twilio.ts` | Twilio: signature check, webhook parsing, the send client |
+| `src/env.d.ts` | Types for the secrets that aren't required |
 | `src/brain.ts` | The Durable Object: inbox, turns, sessions, reflection, the alarm, wipe |
 | `src/turn.ts` | One live turn with Claude, running tools here |
 | `src/claude.ts`, `src/tools.ts`, `src/prompt.ts` | The request shape, the tool list, the prompt and context |
 | `src/reflection.ts` | The reflection schema, prompt, call and retry rules |
 | `src/vault.ts`, `src/wikilinks.ts` | Notes, sections, links, London dates |
 | `src/schema.ts`, `src/seed.ts` | Migrations and the starter `USER.md` |
-| `src/testing.ts` | Fake Claude, fake WhatsApp, fake people and signed fake webhooks |
+| `src/testing.ts` | Fake Claude, fake Meta, fake Twilio, fake people and signed fake webhooks |
 
 ## What to fill in for the product
 
