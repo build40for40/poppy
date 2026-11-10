@@ -3,7 +3,8 @@
 Day 7 of 40 for 40, built live on Twitch on Tuesday 10 November 2026. Poppy is a play helper for parents of small children: a parent who needs an hour messages her on WhatsApp, she suggests one activity for the child, and she remembers how each one went.
 
 - **Form factor:** an assistant parents talk to on WhatsApp, which remembers each family between conversations.
-- **Layout:** `workers/brain` is the only component: a Cloudflare Worker that takes the WhatsApp webhook, in front of one `UserBrain` Durable Object per person. Its README is the spec. Setup and the local sandbox runbook are in `README.md`.
+- **Layout:** `workers/brain` is the only running component: a Cloudflare Worker that takes the WhatsApp webhook, in front of one `UserBrain` Durable Object per person. Its README is the spec. Setup and the local sandbox runbook are in `README.md`.
+- **Landing page:** `landing/index.html` is the draft page parents would see: one file, a scripted chat that shows how Poppy behaves. It isn't served anywhere yet.
 - **Where it came from:** the brain is the Sous brain (Day 5, `sous/workers/brain`) with the cooking taken out. The kit's `agent-memory` skill says what was kept and why.
 - **Tracking:** the Superthread `day7` board. The architecture review card lists the decisions and the known unknowns.
 

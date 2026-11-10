@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Poppy gets you one hour back. A chat that shows how she behaves on WhatsApp.">
+<title>Poppy Landing Page</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap">
+<style>
+  /* Layout: the page is one chat with Poppy. No sections, no feature grid. The visitor plays the parent and Poppy behaves as it would on WhatsApp. */
+  :root {
+    --page: #e8402a; --ink: #2b1230;
+    --chat-bg: #efe7dd; --me: #d9fdd3; --them: #ffffff; --chat-ink: #1f2c33; --chat-soft: #667781; --tick: #53bdeb;
+    --bar: #ffffff; --bar-line: #e0d6cb; --chip: #ffffff; --chip-ink: #2b1230; --chip-line: #2b1230;
+    --sun: #ffd23f; --sun-ink: #3a2a00; --poppy: #e8402a; --poppy-ink: #fff6f2;
+    --display: "Bricolage Grotesque", "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+    --body: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #1c0f20; --ink: #f6eefa;
+      --chat-bg: #0b141a; --me: #005c4b; --them: #202c33; --chat-ink: #e9edef; --chat-soft: #8696a0; --tick: #53bdeb;
+      --bar: #202c33; --bar-line: #2f3b43; --chip: #202c33; --chip-ink: #e9edef; --chip-line: #8696a0;
+      --sun: #ffd23f; --sun-ink: #3a2a00; --poppy: #d93a25; --poppy-ink: #fff6f2;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #1c0f20; --ink: #f6eefa;
+    --chat-bg: #0b141a; --me: #005c4b; --them: #202c33; --chat-ink: #e9edef; --chat-soft: #8696a0; --tick: #53bdeb;
+    --bar: #202c33; --bar-line: #2f3b43; --chip: #202c33; --chip-ink: #e9edef; --chip-line: #8696a0;
+    --sun: #ffd23f; --sun-ink: #3a2a00; --poppy: #d93a25; --poppy-ink: #fff6f2;
+    color-scheme: dark;
+  }
+
+  html, body { height: 100%; }
+  body { background: var(--page); color: var(--chat-ink); font-family: var(--body); font-size: 16px; line-height: 1.42; }
+  .app { height: 100%; max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; background: var(--chat-bg); }
+  :focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
+
+  .head { background: var(--poppy); color: var(--poppy-ink); display: flex; align-items: center; gap: 12px; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .head svg { width: 40px; height: 40px; flex: none; }
+  .head .name { font-family: var(--display); font-weight: 800; font-size: 22px; line-height: 1.1; letter-spacing: -0.01em; }
+  .head .status { font-size: 13px; opacity: 0.92; }
+
+  .log { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-block: 14px; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); }
+  .msg { max-width: 84%; padding: 8px 10px 5px; border-radius: 10px; overflow-wrap: anywhere; }
+  .msg.them { align-self: flex-start; background: var(--them); border-top-left-radius: 2px; }
+  .msg.me { align-self: flex-end; background: var(--me); border-top-right-radius: 2px; }
+  .msg + .msg.me, .msg.me + .msg.them { margin-top: 6px; }
+  .msg strong { font-weight: 700; }
+  .msg a { color: inherit; font-weight: 700; }
+  .meta { display: block; text-align: right; font-size: 11px; color: var(--chat-soft); margin-top: 2px; }
+  .meta b { color: var(--tick); font-weight: 400; }
+  .big { font-family: var(--display); font-weight: 800; font-size: 26px; line-height: 1.08; letter-spacing: -0.02em; }
+  .big em { font-style: normal; background: var(--sun); color: var(--sun-ink); padding: 0 0.14em; border-radius: 0.14em; }
+  .day { align-self: center; background: var(--them); color: var(--chat-soft); font-size: 12px; padding: 4px 12px; border-radius: 8px; margin: 8px 0; }
+  .voice { display: flex; align-items: center; gap: 10px; min-width: 200px; }
+  .play { width: 0; height: 0; border-left: 14px solid var(--chat-soft); border-top: 9px solid transparent; border-bottom: 9px solid transparent; flex: none; }
+  .wave { display: flex; align-items: center; gap: 2px; height: 26px; flex: 1; }
+  .wave i { width: 3px; border-radius: 2px; background: var(--chat-soft); display: block; }
+  .heard { font-size: 13px; color: var(--chat-soft); font-style: italic; margin-top: 4px; }
+  .entry { border-left: 3px solid var(--poppy); padding-left: 8px; margin-top: 6px; font-size: 14px; }
+  .entry span { display: block; color: var(--chat-soft); font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .typing { align-self: flex-start; background: var(--them); border-radius: 10px; border-top-left-radius: 2px; padding: 12px 14px; display: flex; gap: 4px; }
+  .typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--chat-soft); animation: bob 1s infinite ease-in-out; }
+  .typing i:nth-child(2) { animation-delay: 0.15s; } .typing i:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes bob { 0%, 60%, 100% { opacity: 0.35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+  @media (prefers-reduced-motion: reduce) { .typing i { animation: none; } }
+
+  .bar { background: var(--bar); border-top: 1px solid var(--bar-line); padding-block: 10px 12px; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; min-height: 44px; align-items: center; }
+  .chip { font: inherit; font-weight: 500; background: var(--chip); color: var(--chip-ink); border: 1.5px solid var(--chip-line); border-radius: 999px; padding: 9px 16px; cursor: pointer; text-align: left; }
+  .chip:hover { background: var(--sun); color: var(--sun-ink); border-color: var(--sun); }
+  .chip.go { background: var(--sun); color: var(--sun-ink); border-color: var(--sun); font-weight: 700; text-decoration: none; display: inline-block; }
+  .wait { color: var(--chat-soft); font-size: 14px; }
+  .note { font-size: 12px; color: var(--chat-soft); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="head">
+    <svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="17" fill="#2b1230"/><g fill="#ffd23f"><circle cx="17" cy="10.5" r="5"/><circle cx="23.5" cy="17" r="5"/><circle cx="17" cy="23.5" r="5"/><circle cx="10.5" cy="17" r="5"/></g><circle cx="17" cy="17" r="3.6" fill="#e8402a"/></svg>
+    <div>
+      <div class="name">Poppy</div>
+      <div class="status">online, and not judging</div>
+    </div>
+  </div>
+
+  <div class="log" id="log" aria-live="polite">
+    <div class="msg them"><div class="big">Hi, I'm Poppy. I get you one <em>hour</em> back.</div><span class="meta">10:30</span></div>
+    <div class="msg them">When it's all kicking off, you send me a voice note. I send back one thing your three year old can do right now, with stuff you already own.<span class="meta">10:30</span></div>
+    <div class="msg them">Try me. Pretend it's chaos.<span class="meta">10:30</span></div>
+  </div>
+
+  <div class="bar">
+    <div class="chips" id="chips">
+      <button class="chip go" id="start" type="button">Send a voice note</button>
+    </div>
+    <div class="note">A demo of how Poppy behaves. The real Poppy lives in WhatsApp.</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var log = document.getElementById('log');
+  var chips = document.getElementById('chips');
+  var calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var clock = 10 * 60 + 31;
+
+  var themes = {
+    frozen: { label: 'Frozen', col: "a dress for Elsa's ball", bowl: "Elsa's castle needs a proper clean", stick: 'every sticker is a snowflake for Elsa' },
+    dino: { label: 'Dinosaurs', col: 'the biggest dinosaur, any colour but green', bowl: 'the dinosaurs are overdue a bath', stick: 'every sticker is a dinosaur egg to hide' },
+    digger: { label: 'Diggers', col: 'a digger doing the muddiest job ever', bowl: 'the diggers are filthy and need washing', stick: 'every sticker is a rock the diggers have to move' }
+  };
+  var kit = {
+    col: { label: 'Colouring book and pencils', name: 'Colouring', obj: 'colouring book', idea: function (t) { return 'Table, colouring book, pencils. The job: colour ' + t.col + '. Do the first two minutes together, then drift off.'; } },
+    bowl: { label: 'A washing up bowl', name: 'Washing up bowl', obj: 'sponge', idea: function (t) { return 'Washing up bowl, warm water, bubbles, towel on the floor first. The story: ' + t.bowl + '. Hand over a sponge and back away slowly.'; } },
+    stick: { label: 'Stickers and paper', name: 'Stickers', obj: 'sticker sheet', idea: function (t) { return 'Stickers and one sheet of paper. One rule: ' + t.stick + '. Do the first three together, then drift off.'; } }
+  };
+
+  function time() { var h = Math.floor(clock / 60), m = clock % 60; return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m; }
+  function down() { log.scrollTop = log.scrollHeight; }
+  function wait(ms) { return new Promise(function (r) { setTimeout(r, calm ? 0 : ms); }); }
+
+  function bubble(who, html) {
+    var el = document.createElement('div');
+    el.className = 'msg ' + who;
+    el.innerHTML = html + '<span class="meta">' + time() + (who === 'me' ? ' <b>&check;&check;</b>' : '') + '</span>';
+    log.appendChild(el); down();
+  }
+  function day(text) { var el = document.createElement('div'); el.className = 'day'; el.textContent = text; log.appendChild(el); down(); }
+
+  async function poppy(html) {
+    chips.innerHTML = '<span class="wait">Poppy is typing</span>';
+    var t = document.createElement('div');
+    t.className = 'typing'; t.innerHTML = '<i></i><i></i><i></i>';
+    log.appendChild(t); down();
+    await wait(650 + Math.min(900, html.length * 6));
+    t.remove();
+    bubble('them', html);
+    await wait(250);
+  }
+
+  function ask(options) {
+    return new Promise(function (resolve) {
+      chips.innerHTML = '';
+      options.forEach(function (o) {
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'chip'; b.textContent = o.label;
+        b.addEventListener('click', function () { chips.innerHTML = ''; resolve(o); });
+        chips.appendChild(b);
+      });
+      var first = chips.querySelector('button');
+      if (first && document.activeElement === document.body) first.focus({ preventScroll: true });
+    });
+  }
+  async function say(options) { var o = await ask(options); bubble('me', o.say || o.label); return o; }
+
+  function entry(name, lasted, what) {
+    return '<div class="entry"><span>Logged</span>' + name + ' &middot; ' + lasted + ' &middot; ' + what + '</div>';
+  }
+
+  async function run() {
+    bubble('me',
+      '<div class="voice"><span class="play"></span><span class="wave">' +
+      [8, 16, 22, 12, 24, 18, 9, 20, 26, 14, 19, 8, 15, 23, 11, 17, 7, 13].map(function (h) { return '<i style="height:' + h + 'px"></i>'; }).join('') +
+      '</span><span>0:06</span></div><div class="heard">"It\'s all kicking off. I need something. Fast."</div>');
+
+    await poppy("On it. First time, so two quick questions. What are they mad about this week?");
+    var t = await say([{ label: 'Frozen', k: 'frozen' }, { label: 'Dinosaurs', k: 'dino' }, { label: 'Diggers', k: 'digger' }]);
+    var theme = themes[t.k];
+
+    await poppy("And what's within reach?");
+    var s = await say([{ label: kit.col.label, k: 'col' }, { label: kit.bowl.label, k: 'bowl' }, { label: kit.stick.label, k: 'stick' }]);
+    var thing = kit[s.k];
+
+    await poppy(thing.idea(theme));
+    await poppy("That's it. One idea, not forty. Go. Then tell me how it went, even if it went badly.");
+
+    clock += 11;
+    var r = await say([
+      { label: 'Forty quiet minutes', k: 'good', say: 'Forty quiet minutes. I drank a hot tea.' },
+      { label: 'Five minutes, then it got thrown', k: 'bad', say: 'Five minutes. Then it got thrown across the room and they said their first swear word.' }
+    ]);
+
+    var word = '';
+    if (r.k === 'good') {
+      clock += 29;
+      await poppy('A hot one. Lovely.' + entry(thing.name, '40 min', theme.label + ' themed, a keeper'));
+      await poppy("I'll bring that back when you need a sure thing. And I won't ask about " + theme.label + " again. I know now.");
+    } else {
+      await poppy('Oh no. Off the list for now.' + entry(thing.name, '5 min', 'thrown, first swear word'));
+      await poppy('Which word? For the record.');
+      var w = await say([
+        { label: 'It rhymes with duck', k: 'duck', say: 'It rhymes with duck.' },
+        { label: "I'm not typing that", k: 'none', say: "I'm not typing that." }
+      ]);
+      word = w.k;
+      await poppy(w.k === 'duck' ? 'Noted, word for word. Strong debut.' : 'Fair. Logged as "the word".');
+    }
+
+    await wait(500);
+    day('Two days later');
+    clock = 19 * 60 + 5;
+
+    if (r.k === 'good') {
+      await say([{ label: 'What worked on Tuesday?', say: 'What was that thing that worked on Tuesday?' }]);
+      await poppy(thing.name + ', ' + theme.label + ' themed. Tuesday, 10:42. Forty minutes and one hot tea. Want it again, or something new?');
+    } else {
+      await say([{ label: 'What was the word again?', say: 'What was the word they said on Tuesday? Their gran is asking.' }]);
+      await poppy(word === 'duck'
+        ? 'Rhymes with duck. Tuesday, 10:42, just after the ' + thing.obj + ' left their hands. Tell gran it was "fudge".'
+        : 'You never told me. You said "I\'m not typing that". Tuesday, 10:42, just after the ' + thing.obj + ' left their hands.');
+    }
+
+    await poppy("That's me. One idea, with what you've got. I remember how it went, so you don't have to.");
+    await poppy("Two things I'm not. I'm not a babysitter, so you're still nearby with one ear open. And I'm not nosy. Send <strong>/forget</strong> and I delete everything I know about you.");
+    await poppy('I\'m being built today, live, by three people on a Twitch stream. My WhatsApp number opens soon.');
+
+    chips.innerHTML = '';
+    var a = document.createElement('a');
+    a.className = 'chip go'; a.href = 'https://www.twitch.tv/40for40'; a.textContent = 'Watch Poppy being built';
+    var again = document.createElement('button');
+    again.type = 'button'; again.className = 'chip'; again.textContent = 'Try a different day';
+    again.addEventListener('click', function () { location.reload(); });
+    chips.appendChild(a); chips.appendChild(again);
+  }
+
+  document.getElementById('start').addEventListener('click', function () { chips.innerHTML = ''; run(); });
+})();
+</script>
+</body>
+</html>
