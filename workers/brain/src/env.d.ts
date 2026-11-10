@@ -9,4 +9,9 @@ interface __BaseEnv_Env {
   TWILIO_ACCOUNT_SID: string;
   TWILIO_AUTH_TOKEN: string;
   TWILIO_WHATSAPP_FROM: string;
+  // For local runs with `npm run chat`: where replies go, and shorter waits.
+  WHATSAPP_API_BASE: string;
+  IDLE_MINUTES: string;
+  NUDGE_AFTER_MINUTES: string;
+  DEV_TOOLS: string;
 }

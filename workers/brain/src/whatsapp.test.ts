@@ -149,6 +149,14 @@ describe("sending", () => {
     expect(graph.requests).toEqual([{ messaging_product: "whatsapp", status: "read", message_id: "wamid.one", typing_indicator: { type: "text" } }]);
   });
 
+  it("sends to another address when an API base is set, as the terminal chat does", async () => {
+    const fetched = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({}));
+    const local = { ...config(), apiBase: "http://127.0.0.1:8788/" };
+    await sendText(local, ALICE, "Hello.");
+    await markReadAndTyping(local, "wamid.one");
+    expect(fetched.mock.calls.map(([url]) => url)).toEqual(Array(2).fill(`http://127.0.0.1:8788/${env.WHATSAPP_API_VERSION}/${id}/messages`));
+  });
+
   it("reports a failure by status and Meta's code only", async () => {
     const graph = mockGraph();
     graph.status = 400;

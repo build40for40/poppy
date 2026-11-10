@@ -1,8 +1,8 @@
-import { BASE_PATH, error, HttpError, readText } from "./http";
+import { BASE_PATH, error, HttpError, isPlainObject, json, readText } from "./http";
 import { PICTURE_ID, renderPng, starterPicture, type Picture } from "./pictures";
 import { shelfOf } from "./shelf";
 import { emptyTwiml, incomingTwilioMessage, signedUrlCandidates, twilioSenders, verifyTwilioSignature } from "./twilio";
-import { brainName, incomingMessages, safeEqual, verifySignature, type Incoming } from "./whatsapp";
+import { brainName, incomingMessages, safeEqual, verifySignature, type Address, type Incoming } from "./whatsapp";
 
 import type { UserBrain } from "./brain";
 
@@ -15,11 +15,13 @@ const MAX_WEBHOOK_BYTES = 3 * 1024 * 1024;
 const MAX_TWILIO_BYTES = 64 * 1024;
 const WEBHOOK_PATH = `${BASE_PATH}/whatsapp`;
 const TWILIO_PATH = `${BASE_PATH}/twilio`;
+const DEV_PATH = `${BASE_PATH}/dev`;
+const MAX_DEV_BYTES = 4 * 1024;
 const PICTURES_PATH = `${BASE_PATH}/pictures/`;
 
 // The generated stub types recurse too deeply on JSON, so the stub is typed from the class directly.
 type Rpc<T> = { [K in keyof T]: T[K] extends (...args: infer A) => infer R ? (...args: A) => Promise<Awaited<R>> : never };
-type Brain = Rpc<Pick<UserBrain, "receive">>;
+type Brain = Rpc<Pick<UserBrain, "receive" | "devMemory" | "devEnd" | "devAdvance">>;
 
 export default {
   async fetch(request, env): Promise<Response> {
@@ -28,8 +30,10 @@ export default {
       if (request.method !== "GET" && request.method !== "HEAD") return error(405, "method_not_allowed", undefined, { Allow: "GET, HEAD" });
       return picture(request, pathname.slice(PICTURES_PATH.length), env);
     }
-    if (pathname !== WEBHOOK_PATH && pathname !== TWILIO_PATH) return error(404, "not_found");
+    const dev = pathname === DEV_PATH && env.DEV_TOOLS?.trim().toLowerCase() === "true";
+    if (!dev && pathname !== WEBHOOK_PATH && pathname !== TWILIO_PATH) return error(404, "not_found");
     try {
+      if (dev) return await devTools(request, env);
       if (pathname === TWILIO_PATH) {
         if (request.method === "POST") return await twilioWebhook(request, env);
         return error(405, "method_not_allowed", undefined, { Allow: "POST" });
@@ -95,6 +99,37 @@ async function twilioWebhook(request: Request, env: Env): Promise<Response> {
 }
 
 /**
+ * What the terminal chat's /memory, /end and /advance call. It hands back vault content, so it only exists while DEV_TOOLS
+ * is "true", and it wants the same signature as the webhook.
+ */
+async function devTools(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "POST") return error(405, "method_not_allowed", undefined, { Allow: "POST" });
+  if (!env.WHATSAPP_APP_SECRET) return error(503, "whatsapp_unavailable");
+  const raw = await readText(request, MAX_DEV_BYTES);
+  if (!(await verifySignature(raw, request.headers.get("X-Hub-Signature-256"), env.WHATSAPP_APP_SECRET))) return error(401, "bad_signature");
+
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return error(400, "invalid_json");
+  }
+  if (!isPlainObject(body) || typeof body.user_id !== "string" || !/^[A-Za-z0-9._-]{1,256}$/.test(body.user_id)) return error(400, "invalid_sender");
+  const brain = await brainFor({ phone: null, userId: body.user_id }, env);
+
+  if (body.command === "memory") return json(await brain.devMemory(typeof body.path === "string" ? body.path : undefined));
+  let outcome;
+  if (body.command === "end") outcome = await brain.devEnd();
+  else if (body.command === "advance" && typeof body.minutes === "number" && body.minutes > 0 && body.minutes <= 7 * 24 * 60) outcome = await brain.devAdvance(body.minutes);
+  else return error(400, "invalid_command");
+  return outcome === "busy" ? error(409, "busy") : json(outcome);
+}
+
+async function brainFor(address: Address, env: Env): Promise<Brain> {
+  return env.USER_BRAIN.get(env.USER_BRAIN.idFromName(await brainName(address))) as unknown as Brain;
+}
+
+/**
  * A picture as a PNG, for Twilio or Meta to fetch and put on a suggestion. It's drawn from the SVG on the first fetch and
  * kept in the edge cache after that. Pictures hold no one's data, so anyone may fetch them.
  */
@@ -114,6 +149,5 @@ async function picture(request: Request, file: string, env: Env): Promise<Respon
 }
 
 async function deliver(message: Incoming, env: Env): Promise<void> {
-  const brain = env.USER_BRAIN.get(env.USER_BRAIN.idFromName(await brainName(message))) as unknown as Brain;
-  await brain.receive(message);
+  await (await brainFor(message, env)).receive(message);
 }

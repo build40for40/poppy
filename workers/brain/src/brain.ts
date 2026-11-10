@@ -3,7 +3,7 @@ import { BASE_PATH } from "./http";
 import type Anthropic from "@anthropic-ai/sdk";
 import { createClient, liveModel } from "./claude";
 import { USER_MD, type Preferences, type Profile, type PublicProfile } from "./profile";
-import { applyPlayEvents, markNudged, MAX_PLAY_NOTES, nudgeDue, openPlay, type PlayEvent } from "./plays";
+import { applyPlayEvents, markNudged, MAX_PLAY_NOTES, NUDGE_AFTER_MINUTES, nudgeDue, openPlay, type PlayEvent } from "./plays";
 import { starterPicture, type PictureEntry } from "./pictures";
 import { assembleContext, MAX_SESSION_NOTES, MEMORY_MD, type Note } from "./prompt";
 import { isRetryable, reflect, type Reflection } from "./reflection";
@@ -28,6 +28,12 @@ export const REFLECTION_RETRY_MINUTES = [1, 5, 30, 120];
 const REFLECTION_TIMEOUT_MS = 10 * 60_000;
 /** Meta redelivers a webhook for up to seven days, so handled message ids are kept a little longer to spot repeats. */
 const INBOX_KEEP_MS = 8 * 24 * 3600 * 1000;
+
+/** Minutes from an optional env var: a positive number, or the fallback. */
+function minutesFrom(value: string | undefined, fallback: number): number {
+  const minutes = value?.trim() ? Number(value) : NaN;
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : fallback;
+}
 
 export const REPLIES = {
   forgotten: "Done. I've deleted everything I knew about you and your little one. WhatsApp keeps its own copy of this chat, so clear it there too if you want it gone.",
@@ -84,6 +90,24 @@ interface NoteRow extends Record<string, SqlStorageValue> {
   body: string;
 }
 
+export interface DevState {
+  chat_open: boolean;
+  play_waiting: string | null;
+  next_alarm: string | null;
+}
+
+export interface DevMemory {
+  notes: { path: string; frontmatter: unknown; body: string }[];
+  state: DevState;
+}
+
+/** What running the alarm did. `ended` is the chat that was open beforehand, if it ended. */
+export interface DevOutcome {
+  changed: string[];
+  ended: { reason: EndReason; reflection: ReflectionStatus; error: string | null } | null;
+  state: DevState;
+}
+
 export interface SessionView {
   id: string;
   started_at: string;
@@ -108,6 +132,14 @@ export class UserBrain extends DurableObject<Env> {
 
   private get sql(): SqlStorage {
     return this.ctx.storage.sql;
+  }
+
+  private get idleMs(): number {
+    return minutesFrom(this.env.IDLE_MINUTES, IDLE_MINUTES) * 60_000;
+  }
+
+  private get nudgeAfterMinutes(): number {
+    return minutesFrom(this.env.NUDGE_AFTER_MINUTES, NUDGE_AFTER_MINUTES);
   }
 
   private init(): void {
@@ -181,6 +213,59 @@ export class UserBrain extends DurableObject<Env> {
     // From compatibility date 2026-02-24 deleteAll() clears the alarm too, so nothing wakes the empty object and seeds it again.
     await this.ctx.storage.deleteAll();
     this.ready = false;
+  }
+
+  // Dev tools for the terminal chat. Only the route that DEV_TOOLS switches on calls these.
+
+  async devMemory(path?: string): Promise<DevMemory> {
+    this.init();
+    const rows = this.sql.exec<NoteRow>("SELECT path, frontmatter, body FROM files WHERE ? IS NULL OR path = ? ORDER BY path", path ?? null, path ?? null).toArray();
+    return { notes: rows.map((row) => ({ path: row.path, frontmatter: JSON.parse(row.frontmatter), body: row.body })), state: await this.devState() };
+  }
+
+  /** Ends the open chat as if it had gone idle, then runs the alarm so it's reflected on. */
+  async devEnd(): Promise<DevOutcome | "busy"> {
+    this.init();
+    return this.devRun((open) => open && this.endSession(open.id, "idle", new Date()));
+  }
+
+  /**
+   * Pretends time has passed by moving what the deadlines are measured from back by that much, then runs the alarm. A chat's
+   * start isn't moved, so the London midnight ending is never brought on this way.
+   */
+  async devAdvance(minutes: number): Promise<DevOutcome | "busy"> {
+    this.init();
+    const back = (iso: string) => new Date(Date.parse(iso) - minutes * 60_000).toISOString();
+    return this.devRun((open) => {
+      if (open) this.sql.exec("UPDATE sessions SET last_message_at = ? WHERE id = ?", back(open.last_message_at), open.id);
+      for (const row of this.pendingReflections()) {
+        if (row.reflect_after) this.sql.exec("UPDATE sessions SET reflect_after = ? WHERE id = ?", back(row.reflect_after), row.id);
+      }
+      const play = openPlay(this.sql);
+      if (play) this.sql.exec("UPDATE files SET frontmatter = json_set(frontmatter, '$.started_at', ?) WHERE path = ?", back(play.startedAt), play.path);
+    });
+  }
+
+  private async devRun(prepare: (open: SessionRow | undefined) => void): Promise<DevOutcome | "busy"> {
+    // A turn that's still being answered belongs to an alarm already running, and two can't share the inbox.
+    if (this.unhandled().length) return "busy";
+    const snapshot = () => new Map(this.sql.exec<NoteRow>("SELECT path, frontmatter, body FROM files").toArray().map((row) => [row.path, row.frontmatter + row.body]));
+    const before = snapshot();
+    const open = this.openSession();
+    prepare(open);
+    // A real alarm run starts with none set. Without this the one being skipped past would still show as due.
+    await this.ctx.storage.deleteAlarm();
+    await this.alarm();
+    const after = snapshot();
+    const changed = [...new Set([...before.keys(), ...after.keys()])].filter((path) => before.get(path) !== after.get(path)).sort();
+    const session = open && this.listSessions().find((s) => s.id === open.id && s.end_reason);
+    const error = session ? (this.sql.exec<{ reflection_error: string | null }>("SELECT reflection_error FROM sessions WHERE id = ?", session.id).one().reflection_error) : null;
+    return { changed, ended: session ? { reason: session.end_reason!, reflection: session.reflection_status, error } : null, state: await this.devState() };
+  }
+
+  private async devState(): Promise<DevState> {
+    const alarm = await this.ctx.storage.getAlarm();
+    return { chat_open: this.openSession() !== undefined, play_waiting: openPlay(this.sql)?.path ?? null, next_alarm: alarm === null ? null : new Date(alarm).toISOString() };
   }
 
   // Answering messages
@@ -359,7 +444,7 @@ export class UserBrain extends DurableObject<Env> {
   private endExpiredSessions(now: Date): void {
     for (const row of this.sql.exec<SessionRow>("SELECT * FROM sessions WHERE ended_at IS NULL").toArray()) {
       if (londonDate(row.started_at) !== londonDate(now.toISOString())) this.endSession(row.id, "midnight", now);
-      else if (now.getTime() - Date.parse(row.last_message_at) >= IDLE_MINUTES * 60_000) this.endSession(row.id, "idle", now);
+      else if (now.getTime() - Date.parse(row.last_message_at) >= this.idleMs) this.endSession(row.id, "idle", now);
     }
   }
 
@@ -443,7 +528,7 @@ export class UserBrain extends DurableObject<Env> {
    */
   private async nudge(now: Date): Promise<void> {
     const play = openPlay(this.sql);
-    if (!play || play.nudgedAt || this.openSession() || now.getTime() < nudgeDue(play)) return;
+    if (!play || play.nudgedAt || this.openSession() || now.getTime() < nudgeDue(play, this.nudgeAfterMinutes)) return;
     const address = this.address();
     const whatsapp = address && this.channel(address);
     if (!address || !whatsapp) return;
@@ -460,9 +545,9 @@ export class UserBrain extends DurableObject<Env> {
     const now = Date.now();
     const deadlines: number[] = [];
     const open = this.openSession();
-    if (open) deadlines.push(Date.parse(open.last_message_at) + IDLE_MINUTES * 60_000, Date.parse(nextLondonMidnight(new Date(now).toISOString())));
+    if (open) deadlines.push(Date.parse(open.last_message_at) + this.idleMs, Date.parse(nextLondonMidnight(new Date(now).toISOString())));
     const play = openPlay(this.sql);
-    if (play && !play.nudgedAt && !open) deadlines.push(nudgeDue(play));
+    if (play && !play.nudgedAt && !open) deadlines.push(nudgeDue(play, this.nudgeAfterMinutes));
     if (this.env.ANTHROPIC_API_KEY) deadlines.push(...this.pendingReflections().map((row) => Date.parse(row.reflect_after ?? row.ended_at!)));
     this.sql.exec("DELETE FROM inbox WHERE handled_at IS NOT NULL AND handled_at < ?", new Date(now - INBOX_KEEP_MS).toISOString());
     // Nothing is awaited between the last inbox check and this, so no message slips in unanswered; one arriving later sets the alarm to now itself.
@@ -515,9 +600,9 @@ export class UserBrain extends DurableObject<Env> {
         markRead: async () => {},
       };
     }
-    const { WHATSAPP_TOKEN: token, WHATSAPP_PHONE_NUMBER_ID: phoneNumberId, WHATSAPP_API_VERSION: apiVersion } = this.env;
+    const { WHATSAPP_TOKEN: token, WHATSAPP_PHONE_NUMBER_ID: phoneNumberId, WHATSAPP_API_VERSION: apiVersion, WHATSAPP_API_BASE: apiBase } = this.env;
     if (!token || !phoneNumberId || !apiVersion) return null;
-    const config = { token, phoneNumberId, apiVersion };
+    const config = { token, phoneNumberId, apiVersion, apiBase };
     return { send: (to, text, picture) => sendText(config, to, text, picture), markRead: (messageId) => markReadAndTyping(config, messageId) };
   }
 

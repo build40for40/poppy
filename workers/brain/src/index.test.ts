@@ -3,11 +3,12 @@ import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IDLE_MINUTES, REFLECTION_RETRY_MINUTES, REPLIES, TURN_CAP, type UserBrain } from "./brain";
 import { BASE_PATH } from "./http";
+import worker from "./index";
 import { NUDGE_AFTER_MINUTES } from "./plays";
 import { LIVE_PROMPT } from "./prompt";
 import { SCHEMA_VERSION } from "./schema";
 import { brainFor, fakeMessage as rawMessage, fakePerson, fakeReflection, fakeWebhook, mockClaude, mockGraph, postWebhook, sayAs, sentTexts, type FakeMessage, type GraphMock } from "./testing";
-import type { Address } from "./whatsapp";
+import { sign, type Address } from "./whatsapp";
 
 let graph: GraphMock;
 let ALICE: Address;
@@ -45,6 +46,12 @@ const tables = (state: DurableObjectState) =>
     .map((r) => r.name);
 
 const unhandled = (state: DurableObjectState) => (tables(state).includes("inbox") ? state.storage.sql.exec("SELECT COUNT(*) AS n FROM inbox WHERE handled_at IS NULL").one().n : 0);
+
+const withEnv = (vars: Partial<Env>, who: Address = ALICE) =>
+  inBrain(who, (brain) => {
+    const held = brain as unknown as { env: Env };
+    held.env = { ...held.env, ...vars };
+  });
 
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 
@@ -271,10 +278,7 @@ describe("a turn", () => {
 describe("echo mode", () => {
   it("sends the person's own text back without calling Claude or starting a session", async () => {
     const claude = mockClaude();
-    await inBrain(ALICE, (brain) => {
-      const withEnv = brain as unknown as { env: Env };
-      withEnv.env = { ...withEnv.env, ECHO_MODE: "true" };
-    });
+    await withEnv({ ECHO_MODE: "true" });
     await say("Is this thing on?");
     await settle();
     expect(sentTexts(graph).map((r) => r.text.body)).toEqual(["Is this thing on?"]);
@@ -325,6 +329,24 @@ describe("ending a session", () => {
       expect(await state.storage.getAlarm()).toBeNull();
     });
     expect(sentTexts(graph)).toHaveLength(1);
+  });
+
+  it("ends a chat sooner when IDLE_MINUTES is set, and keeps 30 minutes when it's junk", async () => {
+    mockClaude(text("Hello."), reflectionReply(), text("Hello again."));
+    await withEnv({ IDLE_MINUTES: "1" });
+    await say("Hi");
+    await settle();
+    expect(await inBrain(ALICE, (_, state) => state.storage.getAlarm())).toBeLessThanOrEqual(Date.now() + 60_000);
+    await goQuiet(2);
+    await runDurableObjectAlarm(await brainFor(ALICE));
+    expect((await inBrain(ALICE, (brain) => brain.listSessions()))[0]).toMatchObject({ end_reason: "idle", reflection_status: "done" });
+
+    await withEnv({ IDLE_MINUTES: "soon" });
+    await say("Hi again");
+    await settle();
+    await goQuiet(2);
+    await runDurableObjectAlarm(await brainFor(ALICE));
+    expect((await inBrain(ALICE, (brain) => brain.listSessions()))[1]).toMatchObject({ ended_at: null });
   });
 
   it("starts a new session that remembers the last one", async () => {
@@ -476,6 +498,21 @@ describe("a play session", () => {
     expect(await inBrain(ALICE, (_, state) => state.storage.getAlarm())).toBeNull();
   });
 
+  it("asks sooner when NUDGE_AFTER_MINUTES is set", async () => {
+    mockClaude(suggest(), text("Have fun."), reflectionReply());
+    await withEnv({ NUDGE_AFTER_MINUTES: "1" });
+    await say("I need an hour, we're at home");
+    await settle();
+    await endChat();
+    const alarm = await inBrain(ALICE, (_, state) => state.storage.getAlarm());
+    expect(alarm).toBeGreaterThan(Date.now() + sockSorting.minutes * 60_000);
+    expect(alarm).toBeLessThanOrEqual(Date.now() + (sockSorting.minutes + 1) * 60_000);
+
+    await startedAgo(sockSorting.minutes + 2);
+    await runDurableObjectAlarm(await brainFor(ALICE));
+    expect(sentTexts(graph).at(-1)?.text.body).toBe(REPLIES.nudge("Fake sock sorting"));
+  });
+
   it("doesn't ask when the parent has already checked in, or while they're still chatting", async () => {
     mockClaude(suggest(), text("Have fun."), { content: [{ type: "tool_use", name: "check_in", input: { went: "flop", minutes: 5, feedback: "Wandered off." } }] }, text("Noted."), suggest());
     await say("I need an hour, we're at home");
@@ -491,6 +528,51 @@ describe("a play session", () => {
     await runDurableObjectAlarm(await brainFor(ALICE));
 
     expect(sentTexts(graph).map((r) => r.text.body)).not.toContain(REPLIES.nudge("Fake sock sorting"));
+  });
+});
+
+describe("the dev tools", () => {
+  const DEV_URL = `https://build40for40.com${BASE_PATH}/dev`;
+  const request = async (body: Record<string, unknown>) => {
+    const raw = JSON.stringify({ user_id: ALICE.userId, ...body });
+    return new Request(DEV_URL, { method: "POST", headers: { "X-Hub-Signature-256": await sign(raw, env.WHATSAPP_APP_SECRET) }, body: raw });
+  };
+  const withTools = (r: Request) => worker.fetch(r as Parameters<typeof worker.fetch>[0], { ...env, DEV_TOOLS: "true" });
+  const dev = async (body: Record<string, unknown>) => (await (await withTools(await request(body))).json()) as Record<string, any>;
+
+  it("aren't there unless DEV_TOOLS is on: the path is a 404 like any other", async () => {
+    const [off, unknown] = [await exports.default.fetch(await request({ command: "memory" })), await exports.default.fetch(`https://build40for40.com${BASE_PATH}/nothing-here`, { method: "POST" })];
+    expect(off.status).toBe(404);
+    expect(await off.text()).toBe(await unknown.text());
+    expect((await withTools(new Request(DEV_URL, { method: "POST", body: "{}" }))).status).toBe(401);
+  });
+
+  it("end the open chat, reflect on it and say which notes changed", async () => {
+    mockClaude(text("Hello."), reflectionReply());
+    await say("Hi");
+    await settle();
+    const outcome = await dev({ command: "end" });
+    expect(outcome.ended).toEqual({ reason: "idle", reflection: "done", error: null });
+    expect(outcome.changed).toEqual(["USER.md", "interests.md", expect.stringMatching(/^sessions\//)]);
+    expect(outcome.state).toMatchObject({ chat_open: false, play_waiting: null });
+
+    const memory = await dev({ command: "memory", path: "interests.md" });
+    expect(memory.notes).toMatchObject([{ path: "interests.md", body: expect.stringContaining("Loves fake diggers") }]);
+  });
+
+  it("skip time, so the chat ends and then the nudge goes out", async () => {
+    const play = { activity: "Fake sock sorting", setup: "Tip out the socks.", location: "home", props: ["socks"], minutes: 45 };
+    mockClaude({ content: [{ type: "text", text: "Try it." }, { type: "tool_use", name: "start_play", input: play }] }, text("Have fun."), reflectionReply());
+    await say("I need an hour, we're at home");
+    await settle();
+
+    expect((await dev({ command: "advance", minutes: IDLE_MINUTES - 1 })).state).toMatchObject({ chat_open: true });
+    expect(await dev({ command: "advance", minutes: 2 })).toMatchObject({ ended: { reason: "idle", reflection: "done" }, state: { chat_open: false, play_waiting: expect.stringMatching(/^plays\//) } });
+    expect(sentTexts(graph)).toHaveLength(1);
+
+    const outcome = await dev({ command: "advance", minutes: play.minutes + NUDGE_AFTER_MINUTES });
+    expect(sentTexts(graph).at(-1)?.text.body).toBe(REPLIES.nudge("Fake sock sorting"));
+    expect(outcome).toMatchObject({ changed: [expect.stringMatching(/^plays\//)], state: { next_alarm: null } });
   });
 });
 

@@ -5,6 +5,7 @@
   "description": "A WhatsApp assistant that remembers: a Worker in front of one UserBrain Durable Object per user.",
   "type": "module",
   "scripts": {
+    "chat": "node scripts/chat.mjs",
     "dev": "npm run wrangler -- dev",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
