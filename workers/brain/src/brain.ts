@@ -2,19 +2,20 @@ import { DurableObject } from "cloudflare:workers";
 import type Anthropic from "@anthropic-ai/sdk";
 import { createClient, liveModel } from "./claude";
 import { USER_MD, type Preferences, type Profile, type PublicProfile } from "./profile";
+import { applyPlayEvents, markNudged, MAX_PLAY_NOTES, nudgeDue, openPlay } from "./plays";
 import { assembleContext, MAX_SESSION_NOTES, MEMORY_MD, type Note } from "./prompt";
 import { isRetryable, reflect, type Reflection } from "./reflection";
 import { migrate } from "./schema";
 import { starterAbout, starterPreferences } from "./seed";
 import { appendUserText, runTurn } from "./turn";
 import type { Turn } from "./types";
-import { londonDate, londonDay, nextLondonMidnight, readFile, splitLearned, writeFile, writeReflection } from "./vault";
 import { sendTwilioText, TWILIO_SEND_GAP_MS } from "./twilio";
+import { INTERESTS_MD, londonDate, londonDay, londonTime, nextLondonMidnight, readFile, splitLearned, writeFile, writeReflection } from "./vault";
 import { markReadAndTyping, sendText, WhatsAppError, type Address, type Incoming, type Provider } from "./whatsapp";
 
-/** A chat has no "end" button, so a session ends when the person has been quiet this long. TODO(product): tune. */
+/** A chat has no "end" button, so a session ends when the person has been quiet this long. A play session outlives it: see plays.ts. */
 export const IDLE_MINUTES = 30;
-/** A session also ends after this many user turns, because what it learns only reaches the context of the next one. TODO(product): tune. */
+/** A session also ends after this many user turns, because what it learns only reaches the context of the next one. */
 export const TURN_CAP = 40;
 /** Sent on its own, this wipes everything the brain holds about the sender. */
 export const FORGET_COMMAND = "/forget";
@@ -25,12 +26,12 @@ const REFLECTION_TIMEOUT_MS = 10 * 60_000;
 /** Meta redelivers a webhook for up to seven days, so handled message ids are kept a little longer to spot repeats. */
 const INBOX_KEEP_MS = 8 * 24 * 3600 * 1000;
 
-// TODO(product): the assistant's own words for these.
 export const REPLIES = {
-  forgotten: "Done. I've deleted everything I knew about you. WhatsApp keeps its own copy of this chat, so clear it there too if you want it gone.",
+  forgotten: "Done. I've deleted everything I knew about you and your little one. WhatsApp keeps its own copy of this chat, so clear it there too if you want it gone.",
   textOnly: "I can only read text for now. Could you type it out?",
   turnFailed: "Sorry, I lost the thread there. Could you send that again?",
   unavailable: "Sorry, I can't reply right now. Try again in a bit.",
+  nudge: (activity: string) => `How did "${activity}" go? Tell me how long it lasted and what they made of it, and I'll remember for next time.`,
 };
 
 /** How replies get back to a person: the provider their messages arrive through. */
@@ -141,6 +142,7 @@ export class UserBrain extends DurableObject<Env> {
       if (!this.ready) return;
       this.endExpiredSessions(new Date());
       await this.reflectOnEndedSessions(tried);
+      await this.nudge(new Date());
       // A message that arrived during a reflection is answered before the alarm rests.
     } while (this.unhandled().length);
     await this.setNextAlarm();
@@ -229,18 +231,22 @@ export class UserBrain extends DurableObject<Env> {
         model: session.model,
         context: session.context,
         messages: appendUserText(JSON.parse(session.messages), text),
+        playOpen: openPlay(this.sql) !== null,
       });
       const at = now.toISOString();
       const userTurns = session.user_turns + 1;
-      this.sql.exec(
-        "UPDATE sessions SET messages = ?, turns = ?, facts = ?, user_turns = ?, last_message_at = ? WHERE id = ?",
-        JSON.stringify(outcome.messages),
-        JSON.stringify([...JSON.parse(session.turns), { role: "user", at, text } satisfies Turn, ...outcome.turns]),
-        JSON.stringify([...JSON.parse(session.facts), ...outcome.facts]),
-        userTurns,
-        at,
-        session.id,
-      );
+      this.ctx.storage.transactionSync(() => {
+        this.sql.exec(
+          "UPDATE sessions SET messages = ?, turns = ?, facts = ?, user_turns = ?, last_message_at = ? WHERE id = ?",
+          JSON.stringify(outcome.messages),
+          JSON.stringify([...JSON.parse(session.turns), { role: "user", at, text } satisfies Turn, ...outcome.turns]),
+          JSON.stringify([...JSON.parse(session.facts), ...outcome.facts]),
+          userTurns,
+          at,
+          session.id,
+        );
+        applyPlayEvents(this.sql, outcome.plays, session.id, at);
+      });
       if (userTurns >= TURN_CAP) this.endSession(session.id, "turn_cap", new Date());
       console.log(JSON.stringify({ event: "brain_turn", session_id: session.id, model: session.model, user_turns: userTurns, ...outcome.timings, usage: outcome.usage }));
       return outcome.text || null;
@@ -322,8 +328,17 @@ export class UserBrain extends DurableObject<Env> {
   private assembleContext(at: string): string {
     const { preferences, about } = this.readUserMd();
     const sessionNotes = this.sql.exec<NoteRow>("SELECT path, frontmatter, body FROM files WHERE kind = 'session' ORDER BY path DESC LIMIT ?", MAX_SESSION_NOTES).toArray();
-    // TODO(product): pull in the topic notes the product files, the way Sous pulled the notes a recipe linked to.
-    return assembleContext({ user: { preferences, about }, memory: readFile(this.sql, MEMORY_MD)?.body ?? null, sessionNotes: sessionNotes as Note[], today: londonDay(at) });
+    const plays = this.sql.exec<NoteRow>("SELECT path, frontmatter, body FROM files WHERE kind = 'play' ORDER BY json_extract(frontmatter, '$.started_at') DESC LIMIT ?", MAX_PLAY_NOTES).toArray();
+    return assembleContext({
+      user: { preferences, about },
+      interests: readFile(this.sql, INTERESTS_MD)?.body ?? null,
+      memory: readFile(this.sql, MEMORY_MD)?.body ?? null,
+      plays: plays as Note[],
+      openPlay: openPlay(this.sql)?.path ?? null,
+      sessionNotes: sessionNotes as Note[],
+      time: londonTime(at),
+      today: londonDay(at),
+    });
   }
 
   // Reflection
@@ -361,7 +376,7 @@ export class UserBrain extends DurableObject<Env> {
   private async reflectOn(client: Anthropic, row: SessionRow): Promise<void> {
     const started = Date.now();
     const { preferences, about } = this.readUserMd();
-    const { reflection, usage } = await reflect(client, { user: { preferences, about }, turns: JSON.parse(row.turns), facts: JSON.parse(row.facts) });
+    const { reflection, usage } = await reflect(client, { user: { preferences, about }, interests: readFile(this.sql, INTERESTS_MD)?.body ?? null, turns: JSON.parse(row.turns), facts: JSON.parse(row.facts) });
     const note = this.ctx.storage.transactionSync(() => {
       const current = this.sql.exec<SessionRow>("SELECT * FROM sessions WHERE id = ?", row.id).toArray()[0];
       if (!current || current.reflected_at) return null;
@@ -374,14 +389,34 @@ export class UserBrain extends DurableObject<Env> {
     console.log(JSON.stringify({ event: "brain_reflection", session_id: row.id, note, total_ms: Date.now() - started, usage }));
   }
 
+  // The nudge
+
+  /**
+   * Asks once how the open play session went, a while after it was meant to end. It waits for the chat to go quiet first,
+   * so the question never lands in the middle of a conversation whose stored context doesn't know about it.
+   */
+  private async nudge(now: Date): Promise<void> {
+    const play = openPlay(this.sql);
+    if (!play || play.nudgedAt || this.openSession() || now.getTime() < nudgeDue(play)) return;
+    const address = this.address();
+    const whatsapp = address && this.channel(address.provider ?? "meta");
+    if (!address || !whatsapp) return;
+    // Marked before it goes out, so a send that fails isn't tried again and again.
+    markNudged(this.sql, play.path, now.toISOString());
+    await this.send(whatsapp, address, REPLIES.nudge(play.activity));
+    console.log(JSON.stringify({ event: "brain_nudge", play: play.path }));
+  }
+
   // The alarm
 
-  /** The Durable Object has one alarm, so it's set for whichever comes first: the open session going idle, London midnight, or a reflection retry. */
+  /** The Durable Object has one alarm, so it's set for whichever comes first: the open session going idle, London midnight, a reflection retry, or the nudge. */
   private async setNextAlarm(): Promise<void> {
     const now = Date.now();
     const deadlines: number[] = [];
     const open = this.openSession();
     if (open) deadlines.push(Date.parse(open.last_message_at) + IDLE_MINUTES * 60_000, Date.parse(nextLondonMidnight(new Date(now).toISOString())));
+    const play = openPlay(this.sql);
+    if (play && !play.nudgedAt && !open) deadlines.push(nudgeDue(play));
     if (this.env.ANTHROPIC_API_KEY) deadlines.push(...this.pendingReflections().map((row) => Date.parse(row.reflect_after ?? row.ended_at!)));
     this.sql.exec("DELETE FROM inbox WHERE handled_at IS NOT NULL AND handled_at < ?", new Date(now - INBOX_KEEP_MS).toISOString());
     // Nothing is awaited between the last inbox check and this, so no message slips in unanswered; one arriving later sets the alarm to now itself.

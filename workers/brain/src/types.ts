@@ -1,8 +1,10 @@
-/** A fact the assistant chose to keep, saved with the `note` tool. */
+import type { JsonValue } from "./profile";
+
+/** A tool the assistant ran during a turn: a fact it kept, an activity it suggested or a check-in it recorded. */
 export interface ToolCall {
   id: string;
-  name: "note";
-  input: { fact: string };
+  name: "note" | "start_play" | "check_in";
+  input: { [key: string]: JsonValue };
 }
 
 /** One line of the transcript the reflection reads. Raw Claude messages are stored separately. */

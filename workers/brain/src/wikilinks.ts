@@ -1,11 +1,11 @@
 const WIKILINK = /\[\[([^[\]|#\n]+)(?:#[^[\]|\n]*)?(?:\|[^[\]\n]*)?\]\]/g;
 
-// TODO(product): add a folder here for each kind of topic note the reflection files (and to the `files.kind` list in schema.ts).
 const KIND_BY_FOLDER: Record<string, string> = {
   sessions: "session",
+  plays: "play",
 };
 
-const KIND_BY_FILE: Record<string, string> = { "USER.md": "user", "MEMORY.md": "memory" };
+const KIND_BY_FILE: Record<string, string> = { "USER.md": "user", "MEMORY.md": "memory", "interests.md": "interests" };
 
 /** The vault path a link target points at: `sessions/abc` and `sessions/abc.md` are the same note. */
 export function resolveLink(target: string): string | null {

@@ -2,13 +2,12 @@ import type Anthropic from "@anthropic-ai/sdk";
 
 /**
  * The tools Claude can call during a live turn. They all run inside the Durable Object: WhatsApp has no client to hand a tool to.
- * Strict schemas reject `minLength` and friends, so limits live in the description and are checked in `turn.ts`.
- * TODO(product): add the tools the assistant needs, and run each one in `runTool` in `turn.ts`.
+ * Strict schemas reject `minLength` and friends, so limits live in the descriptions and are checked in `plays.ts` and `turn.ts`.
  */
 export const tools = [
   {
     name: "note",
-    description: "Save one lasting fact about the person you're talking to, worth remembering in future conversations. It's kept for later; they don't see it.",
+    description: "Save one lasting fact about the child or the family, worth remembering in future conversations. It's kept for later; they don't see it.",
     strict: true,
     input_schema: {
       type: "object",
@@ -16,6 +15,39 @@ export const tools = [
       required: ["fact"],
       properties: {
         fact: { type: "string", description: "One short fact, in plain words. Never empty." },
+      },
+    },
+  },
+  {
+    name: "start_play",
+    description:
+      "Record the activity you are suggesting, in the same reply as the suggestion. It opens a play session that waits for the parent's check-in. Only one is open at a time: calling it again in this conversation replaces the suggestion they turned down.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["activity", "setup", "location", "props", "minutes"],
+      properties: {
+        activity: { type: "string", description: "A short name for the activity, a few words. Never empty." },
+        setup: { type: "string", description: "How the parent sets it up, as you told them. Never empty." },
+        location: { type: "string", description: "Where they are, in the parent's words, like home, the garden or the park. Never empty." },
+        props: { type: "array", items: { type: "string" }, description: "The things it needs. Empty when it needs nothing." },
+        minutes: { type: "integer", description: "How long it's meant to keep the child busy, in minutes, from 5 to 180." },
+      },
+    },
+  },
+  {
+    name: "check_in",
+    description: "Record how the open play session went, when the parent tells you. It closes the session. Fails when no play session is waiting for a check-in.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["went", "minutes", "feedback"],
+      properties: {
+        went: { type: "string", enum: ["loved", "fine", "flop"], description: "loved: the child was absorbed. fine: it did the job. flop: bored, upset or over in minutes." },
+        minutes: { type: ["integer", "null"], description: "How many minutes it held the child, or null when the parent didn't say." },
+        feedback: { type: "string", description: "What the parent said about how it went, in a sentence or two. Never empty." },
       },
     },
   },
