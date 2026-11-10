@@ -9,9 +9,9 @@ import { migrate } from "./schema";
 import { starterAbout, starterPreferences } from "./seed";
 import { appendUserText, runTurn } from "./turn";
 import type { Turn } from "./types";
-import { sendTwilioText, TWILIO_SEND_GAP_MS } from "./twilio";
+import { sendTwilioText, TWILIO_SEND_GAP_MS, twilioSenders } from "./twilio";
 import { INTERESTS_MD, londonDate, londonDay, londonTime, nextLondonMidnight, readFile, splitLearned, writeFile, writeReflection } from "./vault";
-import { markReadAndTyping, sendText, WhatsAppError, type Address, type Incoming, type Provider } from "./whatsapp";
+import { markReadAndTyping, sendText, WhatsAppError, type Address, type Incoming } from "./whatsapp";
 
 /** A chat has no "end" button, so a session ends when the person has been quiet this long. A play session outlives it: see plays.ts. */
 export const IDLE_MINUTES = 30;
@@ -184,7 +184,7 @@ export class UserBrain extends DurableObject<Env> {
   private async answerInbox(): Promise<void> {
     for (let rows = this.unhandled(); rows.length; rows = this.unhandled()) {
       const address = this.address();
-      const whatsapp = address && this.channel(address.provider ?? "meta");
+      const whatsapp = address && this.channel(address);
       if (!address || !whatsapp) {
         console.warn(JSON.stringify({ event: "brain_reply_skipped", reason: address ? "provider_not_configured" : "no_address", provider: address?.provider, messages: rows.length }));
         this.markHandled(rows);
@@ -399,7 +399,7 @@ export class UserBrain extends DurableObject<Env> {
     const play = openPlay(this.sql);
     if (!play || play.nudgedAt || this.openSession() || now.getTime() < nudgeDue(play)) return;
     const address = this.address();
-    const whatsapp = address && this.channel(address.provider ?? "meta");
+    const whatsapp = address && this.channel(address);
     if (!address || !whatsapp) return;
     // Marked before it goes out, so a send that fails isn't tried again and again.
     markNudged(this.sql, play.path, now.toISOString());
@@ -436,7 +436,7 @@ export class UserBrain extends DurableObject<Env> {
   }
 
   /** The object is named by a hash, so it keeps the number (or user id) it needs to reply to. It's never logged, and /forget deletes it. */
-  private saveAddress({ phone, userId, provider }: Address): void {
+  private saveAddress({ phone, userId, provider, sender }: Address): void {
     const save = (key: string, value: string | null) => {
       if (value) this.sql.exec("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value", key, value);
     };
@@ -444,18 +444,21 @@ export class UserBrain extends DurableObject<Env> {
     save("user_id", userId);
     // Replies go back the way the person's latest message came in.
     save("provider", provider ?? "meta");
+    save("sender", sender ?? null);
   }
 
   private address(): Address | null {
     const get = (key: string) => this.sql.exec<{ value: string }>("SELECT value FROM settings WHERE key = ?", key).toArray()[0]?.value ?? null;
-    const address: Address = { phone: get("phone"), userId: get("user_id"), provider: get("provider") === "twilio" ? "twilio" : "meta" };
+    const address: Address = { phone: get("phone"), userId: get("user_id"), provider: get("provider") === "twilio" ? "twilio" : "meta", sender: get("sender") ?? undefined };
     return address.phone || address.userId ? address : null;
   }
 
   /** The send side of a provider, or null while its secrets aren't set. */
-  private channel(provider: Provider): Channel | null {
+  private channel({ provider, sender }: Address): Channel | null {
     if (provider === "twilio") {
-      const { TWILIO_ACCOUNT_SID: accountSid, TWILIO_AUTH_TOKEN: authToken, TWILIO_WHATSAPP_FROM: from } = this.env;
+      const { TWILIO_ACCOUNT_SID: accountSid, TWILIO_AUTH_TOKEN: authToken } = this.env;
+      const senders = twilioSenders(this.env.TWILIO_WHATSAPP_FROM);
+      const from = sender && senders.includes(sender) ? sender : senders[0];
       if (!accountSid || !authToken || !from) return null;
       const config = { accountSid, authToken, from, gapMs: TWILIO_SEND_GAP_MS };
       return {

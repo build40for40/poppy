@@ -48,19 +48,30 @@ export function signedUrlCandidates(requestUrl: string, publicBaseUrl: string | 
   return candidates;
 }
 
+const SENDER = /^whatsapp:\+\d{5,20}$/;
+
+/** The sender numbers in `TWILIO_WHATSAPP_FROM`: one, or several separated by commas. Anything not shaped like a sender is left out. */
+export function twilioSenders(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((sender) => sender.trim())
+    .filter((sender) => SENDER.test(sender));
+}
+
 /**
  * Reads one incoming WhatsApp message out of a verified Twilio webhook. Twilio sends one message per request, as form fields.
- * Anything that isn't a WhatsApp message to our sender on our account is left out.
+ * Anything that isn't a WhatsApp message to one of our senders on our account is left out.
  */
-export function incomingTwilioMessage(params: URLSearchParams, config: { accountSid?: string; from?: string }): Incoming | null {
+export function incomingTwilioMessage(params: URLSearchParams, config: { accountSid?: string; senders: string[] }): Incoming | null {
   const id = params.get("MessageSid") ?? "";
   if (!/^[A-Z]{2}[0-9a-f]{32}$/i.test(id)) return null;
   if (config.accountSid && params.get("AccountSid") !== config.accountSid) return null;
-  if (config.from && params.get("To") !== config.from) return null;
+  const sender = params.get("To") ?? "";
+  if (!config.senders.includes(sender)) return null;
   const phone = params.get("From")?.match(/^whatsapp:\+(\d{5,20})$/)?.[1];
   if (!phone) return null;
 
-  const base = { id, phone, userId: null, provider: "twilio" as const };
+  const base = { id, phone, userId: null, provider: "twilio" as const, sender };
   const hasMedia = Number(params.get("NumMedia") ?? "0") > 0;
   // TODO(product): voice notes. A voice note arrives as NumMedia=1 with MediaContentType0 starting "audio/" and MediaUrl0
   // pointing at the file (fetched with the account's basic auth). Transcribe it here and return it as kind "text".

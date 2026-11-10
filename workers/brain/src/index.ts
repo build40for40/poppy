@@ -1,5 +1,5 @@
 import { BASE_PATH, error, HttpError, readText } from "./http";
-import { emptyTwiml, incomingTwilioMessage, signedUrlCandidates, verifyTwilioSignature } from "./twilio";
+import { emptyTwiml, incomingTwilioMessage, signedUrlCandidates, twilioSenders, verifyTwilioSignature } from "./twilio";
 import { brainName, incomingMessages, safeEqual, verifySignature, type Incoming } from "./whatsapp";
 
 import type { UserBrain } from "./brain";
@@ -81,7 +81,7 @@ async function twilioWebhook(request: Request, env: Env): Promise<Response> {
   }
   if (!verified) return error(401, "bad_signature");
 
-  const message = incomingTwilioMessage(params, { accountSid: env.TWILIO_ACCOUNT_SID, from: env.TWILIO_WHATSAPP_FROM });
+  const message = incomingTwilioMessage(params, { accountSid: env.TWILIO_ACCOUNT_SID, senders: twilioSenders(env.TWILIO_WHATSAPP_FROM) });
   if (message) await deliver(message, env);
   return emptyTwiml();
 }

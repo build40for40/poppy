@@ -33,10 +33,10 @@ If the turn fails, the person gets a short apology and nothing is saved, so thei
 The Twilio route does the same job with Twilio's shapes (`src/twilio.ts`):
 
 - **Signature.** `X-Twilio-Signature` is the base64 HMAC SHA-1, under the auth token, of the URL Twilio called followed by every form field's name and value, sorted by name. It's checked against the raw form body before the message is used. The URL is the request's own. Behind a tunnel the Worker sees a different host than Twilio called, so `PUBLIC_BASE_URL` gives a second address to check against. Forwarded-host headers aren't trusted.
-- **The message.** One per request. It must be for our account and our sender number, from a `whatsapp:+…` address. A body is text. Media (voice notes included) and locations are marked unsupported. `incomingTwilioMessage` has the `TODO(product)` where voice-note transcription plugs in.
+- **The message.** One per request. It must be for our account and one of our sender numbers, from a `whatsapp:+…` address. A body is text. Media (voice notes included) and locations are marked unsupported. `incomingTwilioMessage` has the `TODO(product)` where voice-note transcription plugs in.
 - **Repeats.** Twilio's `MessageSid` goes in the same inbox, so a repeat is dropped the same way.
 - **Who they are.** The identity is `twilio:` then the number, hashed, so the same phone on Meta and on Twilio is two separate brains. The object remembers which provider the person's messages come through and replies the same way.
-- **Replies.** Through Twilio's Messages API with the account SID and auth token, split at 1,600 characters. The sandbox sends one message every three seconds, so the pieces of a long reply are sent 3.1 seconds apart (`TWILIO_SEND_GAP_MS`). There's no read receipt or typing indicator.
+- **Replies.** Through Twilio's Messages API with the account SID and auth token, from the sender number the person last wrote to, split at 1,600 characters. The sandbox sends one message every three seconds, so the pieces of a long reply are sent 3.1 seconds apart (`TWILIO_SEND_GAP_MS`). There's no read receipt or typing indicator.
 
 `/forget`, echo mode, sessions and reflection don't know which provider is in use.
 
@@ -104,7 +104,7 @@ One thing to know: a message that arrives while a reflection is running waits fo
 | `WHATSAPP_PHONE_NUMBER_ID` | secret | The business number's id. Webhooks for any other number are ignored |
 | `TWILIO_ACCOUNT_SID` | secret | The Twilio account. Webhooks for any other account are ignored |
 | `TWILIO_AUTH_TOKEN` | secret | Checks every Twilio webhook's signature and sends every Twilio reply |
-| `TWILIO_WHATSAPP_FROM` | secret | The sender, as `whatsapp:+` then the number. Messages to any other number are ignored |
+| `TWILIO_WHATSAPP_FROM` | secret | The sender, as `whatsapp:+` then the number. Several senders go in one value, separated by commas. Messages to any other number are ignored, and each person is answered from the number they wrote to |
 | `PUBLIC_BASE_URL` | var | Only for Twilio behind a tunnel: the tunnel's address, so the signature check knows the URL Twilio called |
 | `WHATSAPP_API_VERSION` | var | The Graph API version, `v27.0` |
 | `LIVE_MODEL` | var | The model for live turns. New sessions pick up a change; open ones keep theirs |
