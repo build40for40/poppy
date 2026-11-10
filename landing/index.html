@@ -110,13 +110,13 @@
   var clock = 10 * 60 + 31;
 
   var themes = {
-    frozen: { label: 'Frozen', col: "a dress for Elsa's ball", bowl: "Elsa's castle needs a proper clean", stick: 'every sticker is a snowflake for Elsa' },
-    dino: { label: 'Dinosaurs', col: 'the biggest dinosaur, any colour but green', bowl: 'the dinosaurs are overdue a bath', stick: 'every sticker is a dinosaur egg to hide' },
-    digger: { label: 'Diggers', col: 'a digger doing the muddiest job ever', bowl: 'the diggers are filthy and need washing', stick: 'every sticker is a rock the diggers have to move' }
+    frozen: { label: 'Frozen', col: "a dress for Elsa's ball", box: "it's Elsa's ice palace, and every toy is a guest at the ball", stick: 'every sticker is a snowflake for Elsa' },
+    dino: { label: 'Dinosaurs', col: 'the biggest dinosaur, any colour but green', box: "it's the dinosaur cave, and every dinosaur needs tucking in for the night", stick: 'every sticker is a dinosaur egg to hide' },
+    digger: { label: 'Diggers', col: 'a digger doing the muddiest job ever', box: "it's the digger garage, and every truck has to be parked inside", stick: 'every sticker is a rock the diggers have to move' }
   };
   var kit = {
     col: { label: 'Colouring book and pencils', name: 'Colouring', obj: 'colouring book', idea: function (t) { return 'Table, colouring book, pencils. The job: colour ' + t.col + '. Do the first two minutes together, then drift off.'; } },
-    bowl: { label: 'A washing up bowl', name: 'Washing up bowl', obj: 'sponge', idea: function (t) { return 'Washing up bowl, warm water, bubbles, towel on the floor first. The story: ' + t.bowl + '. Hand over a sponge and back away slowly.'; } },
+    box: { label: 'A big cardboard box', name: 'Box den', obj: 'teddy', idea: function (t) { return 'Big cardboard box on its side, a cushion inside. Staples and tape off first. The story: ' + t.box + '. Help with the first two, then drift off.'; } },
     stick: { label: 'Stickers and paper', name: 'Stickers', obj: 'sticker sheet', idea: function (t) { return 'Stickers and one sheet of paper. One rule: ' + t.stick + '. Do the first three together, then drift off.'; } }
   };
 
@@ -173,7 +173,7 @@
     var theme = themes[t.k];
 
     await poppy("And what's within reach?");
-    var s = await say([{ label: kit.col.label, k: 'col' }, { label: kit.bowl.label, k: 'bowl' }, { label: kit.stick.label, k: 'stick' }]);
+    var s = await say([{ label: kit.col.label, k: 'col' }, { label: kit.box.label, k: 'box' }, { label: kit.stick.label, k: 'stick' }]);
     var thing = kit[s.k];
 
     await poppy(thing.idea(theme));
