@@ -448,7 +448,7 @@ describe("a play session", () => {
   const startedAgo = (minutes: number) => inBrain(ALICE, (_, state) => void state.storage.sql.exec("UPDATE files SET frontmatter = json_set(frontmatter, '$.started_at', ?) WHERE kind = 'play'", minutesAgo(minutes)));
 
   it("opens when an activity is suggested and waits past the end of the chat for a check-in", async () => {
-    const claude = mockClaude(suggest(), text("Have fun."), reflectionReply(), { content: [{ type: "tool_use", name: "check_in", input: { went: "loved", minutes: 50, feedback: "Sorted every sock twice." } }] }, text("Brilliant."));
+    const claude = mockClaude(suggest(), reflectionReply(), { content: [{ type: "tool_use", name: "check_in", input: { went: "loved", minutes: 50, feedback: "Sorted every sock twice." } }] }, text("Brilliant."));
     await say("I need an hour, we're at home");
     await settle();
     expect(await plays()).toMatchObject([{ activity: "Fake sock sorting", location: "home", props: ["socks"], planned_minutes: 45, status: "open", body: "# Fake sock sorting\n\nTip out the socks.\n" }]);
@@ -464,7 +464,7 @@ describe("a play session", () => {
   });
 
   it("drops a suggestion that was turned down in the same chat", async () => {
-    mockClaude(suggest(), text("Have fun."), suggest({ ...sockSorting, activity: "Fake cushion mountain" }), text("Have fun."));
+    mockClaude(suggest(), suggest({ ...sockSorting, activity: "Fake cushion mountain" }));
     await say("I need an hour, we're at home");
     await settle();
     await say("Something else?");
@@ -473,14 +473,14 @@ describe("a play session", () => {
   });
 
   it("saves nothing to the play log when the turn fails", async () => {
-    mockClaude(suggest(), { content: [], stop_reason: "refusal" });
+    mockClaude({ content: [{ type: "tool_use", name: "start_play", input: sockSorting }] }, { content: [], stop_reason: "refusal" });
     await say("I need an hour, we're at home");
     await settle();
     expect(await plays()).toEqual([]);
   });
 
   it("asks once how it went, a while after the activity was meant to end", async () => {
-    mockClaude(suggest(), text("Have fun."), reflectionReply());
+    mockClaude(suggest(), reflectionReply());
     await say("I need an hour, we're at home");
     await settle();
     await endChat();
@@ -493,13 +493,13 @@ describe("a play session", () => {
     await runDurableObjectAlarm(await brainFor(ALICE));
     await runDurableObjectAlarm(await brainFor(ALICE));
 
-    expect(sentTexts(graph).map((r) => r.text.body)).toEqual(["Try Fake sock sorting.\n\nHave fun.", REPLIES.nudge("Fake sock sorting")]);
+    expect(sentTexts(graph).map((r) => r.text.body)).toEqual(["Try Fake sock sorting.", REPLIES.nudge("Fake sock sorting")]);
     expect((await plays())[0]).toMatchObject({ status: "open", nudged_at: expect.any(String) });
     expect(await inBrain(ALICE, (_, state) => state.storage.getAlarm())).toBeNull();
   });
 
   it("asks sooner when NUDGE_AFTER_MINUTES is set", async () => {
-    mockClaude(suggest(), text("Have fun."), reflectionReply());
+    mockClaude(suggest(), reflectionReply());
     await withEnv({ NUDGE_AFTER_MINUTES: "1" });
     await say("I need an hour, we're at home");
     await settle();
@@ -514,7 +514,7 @@ describe("a play session", () => {
   });
 
   it("doesn't ask when the parent has already checked in, or while they're still chatting", async () => {
-    mockClaude(suggest(), text("Have fun."), { content: [{ type: "tool_use", name: "check_in", input: { went: "flop", minutes: 5, feedback: "Wandered off." } }] }, text("Noted."), suggest());
+    mockClaude(suggest(), { content: [{ type: "tool_use", name: "check_in", input: { went: "flop", minutes: 5, feedback: "Wandered off." } }] }, text("Noted."), suggest());
     await say("I need an hour, we're at home");
     await settle();
     await say("That was over in five minutes");
@@ -562,7 +562,7 @@ describe("the dev tools", () => {
 
   it("skip time, so the chat ends and then the nudge goes out", async () => {
     const play = { activity: "Fake sock sorting", setup: "Tip out the socks.", location: "home", props: ["socks"], minutes: 45 };
-    mockClaude({ content: [{ type: "text", text: "Try it." }, { type: "tool_use", name: "start_play", input: play }] }, text("Have fun."), reflectionReply());
+    mockClaude({ content: [{ type: "text", text: "Try it." }, { type: "tool_use", name: "start_play", input: play }] }, reflectionReply());
     await say("I need an hour, we're at home");
     await settle();
 
@@ -582,11 +582,11 @@ describe("a picture on a suggestion", () => {
   const images = () => graph.requests.filter((r) => r.type === "image");
 
   it("lists the pictures in the context and sends the chosen one with the reply as its caption", async () => {
-    const claude = mockClaude(suggest("toy-bath"), text("Have fun."));
+    const claude = mockClaude(suggest("toy-bath"));
     await say("Ada loves dinosaurs, we're at home");
     await settle();
     expect(claude.requests[0].system[1].text).toContain("- toy-bath: Toys having a bath");
-    expect(images()).toEqual([expect.objectContaining({ to: ALICE.phone, image: { link: `${env.PUBLIC_BASE_URL}${BASE_PATH}/pictures/toy-bath.png`, caption: "Try a dino bath.\n\nHave fun." } })]);
+    expect(images()).toEqual([expect.objectContaining({ to: ALICE.phone, image: { link: `${env.PUBLIC_BASE_URL}${BASE_PATH}/pictures/toy-bath.png`, caption: "Try a dino bath." } })]);
     expect(sentTexts(graph)).toEqual([]);
     const note = await inBrain(ALICE, (_, state) => JSON.parse(state.storage.sql.exec<{ frontmatter: string }>("SELECT frontmatter FROM files WHERE kind = 'play'").one().frontmatter));
     expect(note.picture).toBe("toy-bath");
@@ -595,7 +595,7 @@ describe("a picture on a suggestion", () => {
   it("sends the reply without a picture and asks for one to be drawn when none fits", async () => {
     const activity = `Fake swamp ${crypto.randomUUID().slice(0, 8)}`;
     play.activity = activity;
-    mockClaude(suggest("", "toy cars in a fake swamp"), text("Have fun."));
+    mockClaude(suggest("", "toy cars in a fake swamp"));
     await say("Something new please, we're at home");
     await settle();
     play.activity = "Fake dino bath";
@@ -608,7 +608,7 @@ describe("a picture on a suggestion", () => {
   });
 
   it("sends no picture for an id that doesn't exist", async () => {
-    mockClaude(suggest("no-such-picture"), text("Have fun."));
+    mockClaude(suggest("no-such-picture"));
     await say("Something to do, we're at home");
     await settle();
     expect(images()).toEqual([]);

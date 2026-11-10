@@ -123,18 +123,26 @@ describe("runTurn", () => {
   const sockSorting = { activity: "Fake sock sorting", setup: "Tip out the socks.", location: "home", props: ["socks"], minutes: 45, picture: "", pictureBrief: "" };
   const lovedIt = { went: "loved", minutes: 50, feedback: "Sorted every sock twice." };
 
-  it("records a suggested activity and its check-in for the brain to file", async () => {
-    const { outcome } = run(
-      { content: [{ type: "text", text: "Try sock sorting." }, { type: "tool_use", id: "toolu_start", name: "start_play", input: sockSorting }] },
-      { content: [{ type: "tool_use", id: "toolu_check", name: "check_in", input: lovedIt }] },
-      { content: [{ type: "text", text: "Lovely." }] },
-    );
+  it("ends the reply at a suggestion, so Claude isn't asked to sign off twice", async () => {
+    const { claude, outcome } = run({ content: [{ type: "text", text: "Try sock sorting." }, { type: "tool_use", id: "toolu_start", name: "start_play", input: sockSorting }] });
     const result = await outcome;
-    expect(result.plays).toEqual([
-      { type: "start", play: sockSorting },
-      { type: "check_in", checkIn: lovedIt },
-    ]);
+    expect(claude.requests).toHaveLength(1);
+    expect(result.text).toBe("Try sock sorting.");
+    expect(result.plays).toEqual([{ type: "start", play: sockSorting }]);
     expect(result.turns[0].role === "assistant" && result.turns[0].tool_calls).toEqual([{ id: "toolu_start", name: "start_play", input: sockSorting }]);
+    expect(result.messages.at(-1)).toEqual({ role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_start", content: "saved, waiting for their check-in" }] });
+  });
+
+  it("records a check-in and then a new suggestion in one reply", async () => {
+    const { outcome } = runWith(
+      { playOpen: true },
+      { content: [{ type: "tool_use", id: "toolu_check", name: "check_in", input: lovedIt }] },
+      { content: [{ type: "text", text: "Try sock sorting." }, { type: "tool_use", id: "toolu_start", name: "start_play", input: sockSorting }] },
+    );
+    expect((await outcome).plays).toEqual([
+      { type: "check_in", checkIn: lovedIt },
+      { type: "start", play: sockSorting },
+    ]);
   });
 
   it("only takes a check-in when a play session is waiting for one", async () => {
