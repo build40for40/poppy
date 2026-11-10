@@ -36,7 +36,8 @@ The rules for writing it:
 _Proposed:_
 
 - **Reply buttons.** A message can have up to 3, each with a label of up to 20 characters. Twilio offers them through its own message templates, so check they work in the sandbox before relying on them.
-- **A picture at the top of the card.** It should come from a set of pictures made ahead of time and checked by a person, not generated live or pulled from the web. A picture showing deep water or small parts would contradict the safety line in the text.
+
+**Built: a picture on top of the card.** Poppy picks the closest picture from a set that started as thirty hand-drawn ones. When none fits, the card goes without, and a new picture is drawn in the background for next time. See the Pictures section of `workers/brain/README.md`.
 
 ## 2. Activity review: after play
 
@@ -89,7 +90,7 @@ _Proposed:_
 
 ## Still to decide
 
-- **Buttons and pictures:** whether Poppy sends them, which means interactive messages and Twilio message templates.
+- **Buttons:** whether Poppy sends them, which means interactive messages and Twilio message templates.
 - **Voice notes:** whether Poppy reads them. This is already open in `CLAUDE.md`.
 - **A history command:** whether the history list needs its own command.
 

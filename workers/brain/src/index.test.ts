@@ -494,6 +494,46 @@ describe("a play session", () => {
   });
 });
 
+describe("a picture on a suggestion", () => {
+  const play = { activity: "Fake dino bath", setup: "Fill a bowl.", location: "home", props: ["dinosaurs"], minutes: 20 };
+  const suggest = (picture: string, picture_brief = "") => ({ content: [{ type: "text" as const, text: "Try a dino bath." }, { type: "tool_use" as const, name: "start_play", input: { ...play, picture, picture_brief } }] });
+  const images = () => graph.requests.filter((r) => r.type === "image");
+
+  it("lists the pictures in the context and sends the chosen one with the reply as its caption", async () => {
+    const claude = mockClaude(suggest("toy-bath"), text("Have fun."));
+    await say("Ada loves dinosaurs, we're at home");
+    await settle();
+    expect(claude.requests[0].system[1].text).toContain("- toy-bath: Toys having a bath");
+    expect(images()).toEqual([expect.objectContaining({ to: ALICE.phone, image: { link: `${env.PUBLIC_BASE_URL}${BASE_PATH}/pictures/toy-bath.png`, caption: "Try a dino bath.\n\nHave fun." } })]);
+    expect(sentTexts(graph)).toEqual([]);
+    const note = await inBrain(ALICE, (_, state) => JSON.parse(state.storage.sql.exec<{ frontmatter: string }>("SELECT frontmatter FROM files WHERE kind = 'play'").one().frontmatter));
+    expect(note.picture).toBe("toy-bath");
+  });
+
+  it("sends the reply without a picture and asks for one to be drawn when none fits", async () => {
+    const activity = `Fake swamp ${crypto.randomUUID().slice(0, 8)}`;
+    play.activity = activity;
+    mockClaude(suggest("", "toy cars in a fake swamp"), text("Have fun."));
+    await say("Something new please, we're at home");
+    await settle();
+    play.activity = "Fake dino bath";
+    expect(images()).toEqual([]);
+    expect(sentTexts(graph)).toHaveLength(1);
+    const shelf = env.PICTURE_SHELF.get(env.PICTURE_SHELF.idFromName("pictures"));
+    const wanted = await runInDurableObject(shelf, (_, state) => state.storage.sql.exec<{ brief: string }>("SELECT brief FROM wanted WHERE id = ?", activity.toLowerCase().replaceAll(" ", "-")).toArray());
+    expect(wanted).toEqual([{ brief: "toy cars in a fake swamp" }]);
+    await runInDurableObject(shelf, (_, state) => void state.storage.sql.exec("DELETE FROM wanted"));
+  });
+
+  it("sends no picture for an id that doesn't exist", async () => {
+    mockClaude(suggest("no-such-picture"), text("Have fun."));
+    await say("Something to do, we're at home");
+    await settle();
+    expect(images()).toEqual([]);
+    expect(sentTexts(graph)).toHaveLength(1);
+  });
+});
+
 describe("/forget", () => {
   it("wipes everything the brain holds and says so", async () => {
     const claude = mockClaude(text("Hello."));

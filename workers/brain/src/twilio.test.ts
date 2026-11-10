@@ -114,6 +114,18 @@ describe("sendTwilioText", () => {
     expect(bodies().join(" ")).toBe(long);
   });
 
+  it("puts a picture on top, with a short reply as its caption", async () => {
+    await sendTwilioText(config(), FIXED.phone!, "Try dino bath time.", "https://example.com/p/toy-bath.png");
+    expect(twilio.requests).toEqual([{ From: env.TWILIO_WHATSAPP_FROM, To: `whatsapp:+${FIXED.phone}`, Body: "Try dino bath time.", MediaUrl: "https://example.com/p/toy-bath.png" }]);
+  });
+
+  it("sends the picture on its own, then the text, when the reply is too long for a caption", async () => {
+    const long = "word ".repeat(300).trim();
+    await sendTwilioText(config(), FIXED.phone!, long, "https://example.com/p/toy-bath.png");
+    expect(twilio.requests[0]).toEqual({ From: env.TWILIO_WHATSAPP_FROM, To: `whatsapp:+${FIXED.phone}`, MediaUrl: "https://example.com/p/toy-bath.png" });
+    expect(twilio.requests.slice(1).map((r) => r.Body).join(" ")).toBe(long);
+  });
+
   it("reports the status and Twilio's code when a send fails, and nothing else", async () => {
     twilio.status = 400;
     const failure = await sendTwilioText(config(), FIXED.phone!, "Hello").catch((e) => e);

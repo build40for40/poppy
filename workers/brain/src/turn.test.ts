@@ -120,7 +120,7 @@ describe("runTurn", () => {
     expect(result.text).toBe("Sorry about that.");
   });
 
-  const sockSorting = { activity: "Fake sock sorting", setup: "Tip out the socks.", location: "home", props: ["socks"], minutes: 45 };
+  const sockSorting = { activity: "Fake sock sorting", setup: "Tip out the socks.", location: "home", props: ["socks"], minutes: 45, picture: "", pictureBrief: "" };
   const lovedIt = { went: "loved", minutes: 50, feedback: "Sorted every sock twice." };
 
   it("records a suggested activity and its check-in for the brain to file", async () => {

@@ -14,7 +14,7 @@ describe("LIVE_PROMPT", () => {
 });
 
 describe("assembleContext", () => {
-  const base = { user: { preferences: { language: "en" }, about: "# About me\n\nFake person.\n" }, interests: null, memory: null, plays: [], openPlay: null, sessionNotes: [], time: "14:05", today: "10 November 2026" };
+  const base = { user: { preferences: { language: "en" }, about: "# About me\n\nFake person.\n" }, interests: null, memory: null, plays: [], openPlay: null, sessionNotes: [], pictures: [], time: "14:05", today: "10 November 2026" };
 
   it("lays out the profile, interests, memory, the play log, earlier conversations and the time", () => {
     const context = assembleContext(base);
@@ -27,6 +27,7 @@ describe("assembleContext", () => {
         "# Waiting for a check-in\n\nNothing.",
         "# Your last conversations, newest first\n\nNone yet: this is the first time you've talked.",
         "# This conversation\n\nIt started at 14:05 on 10 November 2026, UK time.",
+        "# Pictures\n\nNone yet.",
       ].join("\n\n"),
     );
   });
@@ -56,6 +57,11 @@ describe("assembleContext", () => {
     expect(context).toContain("# interests.md\n\n# Interests\n\n## What they're into\n\n- Loves fake diggers");
     expect(context).toContain('## plays/2026-11-10-cccccccc.md\nfrontmatter: {"activity":"Fake sock sorting","status":"open"}\n# Fake sock sorting\n\nTip out the socks.');
     expect(context).toContain("# Waiting for a check-in\n\nplays/2026-11-10-cccccccc.md is still open");
+  });
+
+  it("lists the pictures Claude can put on a suggestion, last", () => {
+    const context = assembleContext({ ...base, pictures: [{ id: "toy-bath", about: "Toys having a bath" }, { id: "fake-swamp", about: "A fake swamp" }] });
+    expect(context.endsWith("# Pictures\n\n- toy-bath: Toys having a bath\n- fake-swamp: A fake swamp")).toBe(true);
   });
 
   it("gives the same bytes for the same input, so the prompt cache holds", () => {
