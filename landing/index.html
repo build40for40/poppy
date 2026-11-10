@@ -155,7 +155,52 @@
   .send { flex: none; width: 42px; height: 42px; border-radius: 50%; border: 0; background: var(--poppy); color: #fff; display: grid; place-items: center; cursor: pointer; }
   .send svg { width: 20px; height: 20px; fill: currentColor; }
   .send:disabled { opacity: 0.45; cursor: default; }
-  @media (max-width: 599px) { .stage.fit .phone { height: calc(var(--vvh) - 12px); } }
+  .finale, .yourself, .back .short, .back .arrow { display: none; }
+
+  /* PHONES AND TABLETS (under 900px). No drawn phone and no pinned scroll story: the page scrolls like a real chat, top to bottom.
+     The headline sits above the chat, Poppy's header sticks to the top, and one Try Poppy button sticks to the bottom. */
+  @media (max-width: 899px) {
+    .track { height: auto !important; min-height: 0; }
+    .stage { position: static; height: auto; display: block; overflow: visible; }
+    .pitch { display: block; box-sizing: border-box; max-width: 560px; margin: 0 auto; padding: 26px 20px 22px; color: var(--pitch-ink); }
+    .pitch h1 { margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(32px, 9.6vw, 46px); line-height: 1.04; letter-spacing: -0.025em; text-wrap: balance; }
+    .pitch p { margin: 12px 0 0; font-size: 17px; line-height: 1.4; }
+    .pitch .wide-only { display: none; }
+    .pitch .chip { display: block; width: 100%; box-sizing: border-box; margin-top: 18px; min-height: 52px; font-size: 18px; text-align: center; }
+    .phone { position: static; width: auto; max-width: 560px; margin: 0 auto; height: auto; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: var(--chat-bg); }
+    .phone::before, .phone::after, .cam, .sbar, .home { display: none; }
+    .app { height: auto; border-radius: 0; overflow: visible; }
+    .head { position: sticky; top: 0; z-index: 5; padding-top: calc(7px + env(safe-area-inset-top, 0px)); }
+    .head .narrow { display: none; }
+    .head .wide { display: inline; }
+    #log { flex: none; overflow: visible; justify-content: flex-start; padding-block: 14px 10px; }
+    #log .row { grid-template-rows: 1fr; opacity: 0; transform: translateY(14px); transition: opacity 0.45s ease, transform 0.45s ease; }
+    #log .row.seen { opacity: 1; transform: none; }
+    .finale { display: flex; flex-direction: column; gap: 10px; padding: 4px 16px 22px; }
+    .finale .chip { display: flex; align-items: center; justify-content: center; box-sizing: border-box; min-height: 50px; font-size: 17px; text-align: center; }
+    .finale .note { text-align: center; }
+    .bar { position: sticky; bottom: 0; z-index: 4; padding-block: 10px max(10px, env(safe-area-inset-bottom, 0px)); transition: opacity 0.2s ease; }
+    .bar.away { opacity: 0; pointer-events: none; }
+    .bar .chips, .bar .note { display: none; }
+    .bar .chip.try { flex: 1; min-height: 50px; font-size: 17px; text-align: center; }
+    .yourself { display: inline; }
+
+    /* The Try Poppy chat fills the screen, and is kept to the part of the screen the keyboard leaves free. */
+    .app.live { position: fixed; z-index: 20; top: 0; left: 50%; width: min(100vw, 560px); margin-left: calc(min(100vw, 560px) / -2); height: 100vh; height: var(--vvh, 100dvh); overflow: hidden; transform: translateY(var(--vvt, 0px)); }
+    .app.live .finale { display: none; }
+    .app.live .head { position: static; gap: 6px; padding-left: max(4px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); }
+    .back { order: -1; display: inline-flex; align-items: center; gap: 3px; min-width: 44px; min-height: 44px; padding: 0 8px 0 6px; background: none; font-size: 15px; }
+    .back .long { display: none; }
+    .back .short { display: inline; }
+    .back .arrow { display: inline; font-size: 26px; line-height: 1; margin-top: -3px; }
+    .fresh { width: 44px; height: 44px; }
+    .fresh svg { width: 20px; height: 20px; }
+    #live { padding-block: 12px 8px; }
+    .starter { min-height: 44px; font-size: 15px; }
+    .send { width: 46px; height: 46px; }
+    .compose { padding-bottom: max(8px, env(safe-area-inset-bottom, 0px)); }
+  }
+  @media (max-width: 899px) and (prefers-reduced-motion: reduce) { #log .row { opacity: 1; transform: none; transition: none; } }
 </style>
 </head>
 <body>
@@ -165,7 +210,7 @@
 <div class="pitch">
   <h1>A bottomless toy box that <em>remembers</em> your kid.</h1>
   <p>Poppy is a play assistant for parents. Tell her what your kid's into and where you are, and she suggests something to play. She remembers how it went, so every idea fits better than the last.</p>
-  <p>Poppy lives in WhatsApp. Tell her it's all kicking off and she sends one thing to do. Or try her right here.</p>
+  <p class="wide-only">Poppy lives in WhatsApp. Tell her it's all kicking off and she sends one thing to do. Or try her right here.</p>
   <button type="button" class="chip" data-try>Try Poppy yourself</button>
 </div>
 <div class="phone">
@@ -185,16 +230,21 @@
       <div class="status"><span class="narrow">The toy box that <em>remembers</em> your kid.</span><span class="wide">online, and not judging</span><span class="inlive">demo chat</span></div>
     </div>
     <button type="button" class="fresh" id="fresh" aria-label="Start a new chat" title="Start a new chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
-    <button type="button" class="back" id="back">Back to the story</button>
+    <button type="button" class="back" id="back" aria-label="Back to the story"><span class="arrow" aria-hidden="true">&lsaquo;</span><span class="long">Back to the story</span><span class="short">Story</span></button>
   </div>
 
   <div class="log" id="log"></div>
   <div class="log" id="live" role="log" aria-live="polite" aria-label="Your chat with Poppy"></div>
+  <div class="finale" id="finale">
+    <button type="button" class="chip try" data-try>Try Poppy yourself</button>
+    <a class="chip go" id="watch" href="https://www.twitch.tv/40for40">Watch Poppy being built</a>
+    <div class="note">Poppy's real messages. A made up family.</div>
+  </div>
 
   <div class="bar">
     <div class="acts">
       <div class="chips" id="chips"><span class="hint"><i></i>Scroll to see how it went</span></div>
-      <button type="button" class="chip try" data-try aria-label="Try Poppy yourself">Try Poppy</button>
+      <button type="button" class="chip try" data-try aria-label="Try Poppy yourself">Try Poppy<span class="yourself"> yourself</span></button>
     </div>
     <div class="note">Poppy's real messages. A made up family.</div>
   </div>
@@ -325,6 +375,7 @@ poppy: Any time. I remember how it went so you don't have to. And if you ever wa
   var API_PATH = '/poppy/api/web';              // where a visitor's message is sent
   var LIVE_HOSTS = ['build40for40.com', 'www.build40for40.com', 'localhost', '127.0.0.1']; // anywhere else, or with ?mock=1, the replies are canned
   var VISITOR_ID_KEY = 'poppy-demo-visitor';    // where this browser's random id is kept
+  var VISITOR_CHATTED_KEY = 'poppy-demo-chatted'; // set once this browser has sent Poppy a message with that id
   var REPLY_TIMEOUT_MS = 40000;
   var WATCH_URL = 'https://www.twitch.tv/40for40';
   var STARTERS = [
@@ -422,8 +473,29 @@ poppy: Any time. I remember how it went so you don't have to. And if you ever wa
 
   show = Math.min(show, rows.length);
   var steps = rows.length - show;
-  track.style.height = 'calc(100vh + ' + (steps * STEP + 40) + 'px)';
-  track.style.height = 'calc(100dvh + ' + (steps * STEP + 40) + 'px)';
+  // Two layouts. Wide screens get the pinned phone, where scrolling the tall page brings in one message at a time.
+  // Phones and tablets get a plain page that scrolls like a chat: every message is there, and each eases in the first time it comes on screen.
+  var narrow = window.matchMedia('(max-width: 899px)');
+  function flow() { return narrow.matches; }
+  function layout() {
+    if (flow()) { track.style.height = ''; return; }
+    track.style.height = 'calc(100vh + ' + (steps * STEP + 40) + 'px)';
+    track.style.height = 'calc(100dvh + ' + (steps * STEP + 40) + 'px)';
+  }
+  layout();
+  var watcher = null;
+  function reveal() {
+    if (watcher || !flow()) return;
+    if (!('IntersectionObserver' in window)) { rows.forEach(function (r) { r.classList.add('seen'); }); return; }
+    watcher = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        var at = rows.indexOf(entry.target);
+        for (var i = 0; i <= at; i++) { if (!rows[i].classList.contains('seen')) { rows[i].classList.add('seen'); watcher.unobserve(rows[i]); } } // and anything above it, so a fast flick leaves no gaps
+      });
+    }, { rootMargin: '0px 0px -60px 0px', threshold: 0.05 });
+    rows.forEach(function (r) { watcher.observe(r); });
+  }
 
   // The first screen arrives by itself: the first message is there, then each of the others turns up after a pause, Poppy's behind a typing bubble.
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -453,7 +525,7 @@ poppy: Any time. I remember how it went so you don't have to. And if you ever wa
     chips.appendChild(a);
   }
   function update() {
-    if (liveOn) return;
+    if (liveOn || flow()) return;
     var y = Math.max(0, window.scrollY - track.offsetTop);
     var n = Math.min(rows.length, show + Math.floor((y + STEP * 0.25) / STEP));
     if (ready < show) {
@@ -471,9 +543,20 @@ poppy: Any time. I remember how it went so you don't have to. And if you ever wa
   window.addEventListener('scroll', update, { passive: true });
   window.addEventListener('resize', update);
   log.classList.add('still'); // the messages already there at the start appear without animating
-  if (!reduce && show > 1) ready = 1;
+  if (!reduce && show > 1 && !flow()) ready = 1;
   update();
+  reveal();
   setTimeout(function () { log.classList.remove('still'); next(); }, 80);
+  // The sticky Try Poppy button steps aside while another Try Poppy button is on screen: the one under the headline, or the one at the end of the story.
+  var bar = document.querySelector('.bar'), finale = document.getElementById('finale'), others = [document.querySelector('.pitch [data-try]'), finale.querySelector('[data-try]')], inView = [false, false];
+  document.getElementById('watch').href = WATCH_URL;
+  if ('IntersectionObserver' in window) {
+    var aside = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) { inView[others.indexOf(entry.target)] = entry.isIntersecting; });
+      bar.classList.toggle('away', inView[0] || inView[1]);
+    }, { threshold: 0.5 });
+    others.forEach(function (el) { aside.observe(el); });
+  }
 
   // ---- The live chat ----
   var MOCK = /[?&]mock=1(&|$)/.test(location.search) || LIVE_HOSTS.indexOf(location.hostname) === -1;
@@ -483,7 +566,7 @@ poppy: Any time. I remember how it went so you don't have to. And if you ever wa
   var started = false, waiting = false, closed = false, storyY = 0, liveLast = '', cannedLeft = CANNED_LEFT, cannedAt = 0, memoryId = '';
   var chat = 0, flight = null, typingClock = 0; // chat counts the chats started, so a reply meant for an earlier one can be dropped
   var returning = false; // this browser has chatted before, so the Poppy behind its id still remembers
-  try { returning = !!localStorage.getItem(VISITOR_ID_KEY); } catch (e) {}
+  try { returning = !!localStorage.getItem(VISITOR_ID_KEY) && !!localStorage.getItem(VISITOR_CHATTED_KEY); } catch (e) {}
   var liveTyping = typing.cloneNode(true);
 
   function ukTime() {
@@ -612,6 +695,7 @@ poppy: Any time. I remember how it went so you don't have to. And if you ever wa
     text = String(text).trim().slice(0, 500);
     if (!text || waiting || closed) return;
     say.value = ''; starters.hidden = true;
+    try { localStorage.setItem(VISITOR_CHATTED_KEY, '1'); } catch (e) {}
     var mine = document.createElement('div'); mine.textContent = text;
     var row = liveMsg('me', mine);
     busy(true);
@@ -652,6 +736,7 @@ poppy: Any time. I remember how it went so you don't have to. And if you ever wa
     clearTimeout(typingClock); showTyping(false);
     if (flight) { try { flight.abort(); } catch (e) {} flight = null; }
     freshId(); returning = false;
+    try { localStorage.removeItem(VISITOR_CHATTED_KEY); } catch (e) {}
     cannedLeft = CANNED_LEFT; cannedAt = 0;
     startChat();
     now.textContent = ukTime();
@@ -660,18 +745,30 @@ poppy: Any time. I remember how it went so you don't have to. And if you ever wa
 
   // On a phone the keyboard covers the bottom of the screen, so the phone frame is fitted to what's left above it.
   var vv = window.visualViewport;
+  var liveFlow = false; // which layout the chat was opened in
   function fit() {
     if (!liveOn) return;
+    if (liveFlow) {
+      if (vv) { app.style.setProperty('--vvh', vv.height + 'px'); app.style.setProperty('--vvt', vv.offsetTop + 'px'); }
+      toBottom();
+      return;
+    }
     if (vv) { stage.style.setProperty('--vvh', vv.height + 'px'); stage.style.height = vv.height + 'px'; stage.classList.add('fit'); }
     window.scrollTo(0, 0);
     toBottom();
+  }
+  // On a phone the page behind the chat is held still, and put back where it was afterwards.
+  function hold(on) {
+    var b = document.body.style;
+    b.position = on ? 'fixed' : ''; b.top = on ? -storyY + 'px' : ''; b.left = on ? '0' : ''; b.right = on ? '0' : '';
   }
   function openLive() {
     if (liveOn) return;
     storyY = window.scrollY;
     clearTimeout(timer); stopTyping(); ready = show; shown = -1; update(); // the story's opening finishes quietly behind the chat
-    liveOn = true;
-    app.classList.add('live'); track.classList.add('live');
+    liveOn = true; liveFlow = flow();
+    if (liveFlow) hold(true);
+    app.classList.add('live'); if (!liveFlow) track.classList.add('live');
     if (!started) {
       started = true;
       startChat();
@@ -691,7 +788,9 @@ poppy: Any time. I remember how it went so you don't have to. And if you ever wa
     liveOn = false;
     app.classList.remove('live'); track.classList.remove('live');
     stage.classList.remove('fit'); stage.style.height = ''; stage.style.removeProperty('--vvh');
+    app.style.removeProperty('--vvh'); app.style.removeProperty('--vvt');
     say.blur();
+    if (liveFlow) { hold(false); window.scrollTo(0, storyY); return; }
     var back = function () { window.scrollTo(0, storyY); shown = -1; update(); };
     back(); setTimeout(back, 0); // again once the page is tall again, so the story is where they left it
   }
@@ -701,6 +800,9 @@ poppy: Any time. I remember how it went so you don't have to. And if you ever wa
   form.addEventListener('submit', function (e) { e.preventDefault(); send(say.value); });
   if (vv) { vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit); }
   window.addEventListener('resize', fit);
+  // Turning a tablet, or resizing the window across 900px, swaps the layout.
+  var swap = function () { closeLive(); layout(); reveal(); shown = -1; update(); };
+  if (narrow.addEventListener) narrow.addEventListener('change', swap); else if (narrow.addListener) narrow.addListener(swap);
 })();
 </script>
 </body>
