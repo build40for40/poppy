@@ -3,7 +3,8 @@ import { createExecutionContext, runInDurableObject } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WEB_LIFE_MS, type UserBrain } from "./brain";
 import { BASE_PATH } from "./http";
-import worker, { WEB_DAILY_MAX, WEB_MAX_CHARS, WEB_MAX_MESSAGES } from "./index";
+import { WEB_DAILY_MAX, WEB_MAX_CHARS, WEB_MAX_MESSAGES } from "./gate";
+import worker from "./index";
 import { brainFor, mockClaude, mockGraph, mockTwilio, type GraphMock, type TwilioMock } from "./testing";
 import type { Address } from "./whatsapp";
 

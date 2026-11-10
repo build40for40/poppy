@@ -2,7 +2,7 @@ import { BASE_PATH, error, HttpError, isPlainObject, json, readText } from "./ht
 import { PICTURE_ID, renderPng, starterPicture, type Picture } from "./pictures";
 import { shelfOf } from "./shelf";
 import landingPage from "../../../landing/index.html";
-import { gateOf } from "./gate";
+import { gateOf, WEB_DAILY_MAX, WEB_MAX_CHARS, WEB_MAX_MESSAGES } from "./gate";
 import { emptyTwiml, incomingTwilioMessage, signedUrlCandidates, twilioPieces, twilioSenders, twimlReply, verifyTwilioSignature } from "./twilio";
 import { brainName, incomingMessages, safeEqual, verifySignature, type Address, type Incoming } from "./whatsapp";
 
@@ -31,11 +31,6 @@ const LANDING_PATH = BASE_PATH.replace(/\/api$/, "");
 const WEB_PATH = `${BASE_PATH}/web`;
 const MAX_WEB_BYTES = 4 * 1024;
 const WEB_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-export const WEB_MAX_CHARS = 500;
-/** Messages one visitor's demo chat may send before it's told to find Poppy on WhatsApp. */
-export const WEB_MAX_MESSAGES = 10;
-/** Messages the demo chat takes in a day, across every visitor. */
-export const WEB_DAILY_MAX = 500;
 const WEB_WAIT_MS = 30_000;
 
 // The generated stub types recurse too deeply on JSON, so the stub is typed from the class directly.
@@ -151,7 +146,6 @@ async function twilioWebhook(request: Request, env: Env, ctx: ExecutionContext):
  * a ceiling on how many messages the whole page takes in a day.
  */
 async function webChat(request: Request, env: Env): Promise<Response> {
-  if (!env.ANTHROPIC_API_KEY) return error(503, "unavailable");
   let body: unknown;
   try {
     body = JSON.parse(await readText(request, MAX_WEB_BYTES));
