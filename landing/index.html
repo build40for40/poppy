@@ -95,7 +95,7 @@
   .day { align-self: center; background: var(--them); color: var(--chat-soft); font-size: 12px; padding: 4px 12px; border-radius: 8px; margin: 8px 0 14px; }
   /* A suggestion: a picture with the words as its caption, the way WhatsApp shows a photo message. */
   .msg.card { width: 90%; max-width: 90%; padding: 3px 3px 5px; line-height: 1.36; }
-  .card .pic { display: block; width: 100%; height: auto; aspect-ratio: 600 / 232; border-radius: 8px; border-top-left-radius: 1px; } /* shown a little cropped at the top (empty wall), the way WhatsApp crops a photo, so the whole card fits one screen */
+  .card .pic { display: block; width: 100%; height: auto; aspect-ratio: 600 / 232; border-radius: 8px; border-top-left-radius: 1px; } /* shown a little cropped top and bottom (empty wall and floor), the way WhatsApp crops a photo, so the whole card fits one screen */
   .card .cap { padding: 7px 7px 0; }
   .card .meta { padding-right: 7px; }
   .p + .p { margin-top: 7px; }
@@ -212,9 +212,12 @@
 
 <!--
   POPPY'S PICTURES. These are drawn by Poppy's own code (the starter pictures in the poppy repo), copied here as they are.
-  A card can only use a picture that is in this block. Today that is: painting
+  A card can only use a picture that is in this block. Today that is: blanket-den, ball-toss, painting
+  (the story uses the first two; painting is only for the canned replies in the Try Poppy chat)
 -->
 <template id="pictures">
+<svg data-picture="blanket-den" viewBox="0 0 600 340" role="img" aria-label="A den made from a blanket over two chairs, with cushions inside"><rect width="600" height="340" fill="#E6F1FB"/><rect y="250" width="600" height="90" fill="#FAEEDA"/><rect y="244" width="600" height="8" fill="#D3D1C7"/><rect x="70" y="80" width="20" height="176" fill="#BA7517"/><rect x="70" y="160" width="90" height="16" fill="#BA7517"/><rect x="146" y="160" width="14" height="96" fill="#BA7517"/><rect x="510" y="80" width="20" height="176" fill="#BA7517"/><rect x="440" y="160" width="90" height="16" fill="#BA7517"/><rect x="440" y="160" width="14" height="96" fill="#BA7517"/><path d="M60 84 Q300 40 540 84 L560 270 Q480 240 400 262 L300 160 L200 262 Q120 240 40 270 Z" fill="#7F77DD"/><path d="M60 84 Q300 40 540 84" fill="none" stroke="#534AB7" stroke-width="6"/><circle cx="110" cy="130" r="8" fill="#CECBF6"/><circle cx="200" cy="130" r="8" fill="#CECBF6"/><circle cx="290" cy="130" r="8" fill="#CECBF6"/><circle cx="380" cy="130" r="8" fill="#CECBF6"/><circle cx="470" cy="130" r="8" fill="#CECBF6"/><path d="M300 160 L220 262 H380 Z" fill="#26215C"/><ellipse cx="270" cy="252" rx="40" ry="18" fill="#D4537E"/><ellipse cx="336" cy="256" rx="36" ry="16" fill="#EF9F27"/></svg>
+<svg data-picture="ball-toss" viewBox="0 0 600 340" role="img" aria-label="Soft balls being thrown into a laundry basket"><rect width="600" height="340" fill="#E6F1FB"/><rect y="250" width="600" height="90" fill="#FAEEDA"/><rect y="244" width="600" height="8" fill="#D3D1C7"/><path d="M330 160 H500 L484 262 H346 Z" fill="#378ADD"/><rect x="322" y="150" width="186" height="20" rx="8" fill="#185FA5"/><rect x="360" y="190" width="18" height="52" rx="6" fill="#85B7EB"/><rect x="394" y="190" width="18" height="52" rx="6" fill="#85B7EB"/><rect x="428" y="190" width="18" height="52" rx="6" fill="#85B7EB"/><rect x="462" y="190" width="18" height="52" rx="6" fill="#85B7EB"/><circle cx="150" cy="236" r="26" fill="#D85A30"/><path d="M130.5 230.8 q19.5 15.6 39 0" fill="none" stroke="#FFFFFF" stroke-width="3.12" opacity="0.6"/><circle cx="240" cy="120" r="22" fill="#EF9F27"/><path d="M223.5 115.6 q16.5 13.2 33 0" fill="none" stroke="#FFFFFF" stroke-width="2.6399999999999997" opacity="0.6"/><circle cx="408" cy="146" r="18" fill="#639922"/><path d="M394.5 142.4 q13.5 10.799999999999999 27 0" fill="none" stroke="#FFFFFF" stroke-width="2.16" opacity="0.6"/><path d="M150 210 q60-150 240-80" fill="none" stroke="#B4B2A9" stroke-width="4" stroke-dasharray="10 8"/><rect x="80" y="262" width="40" height="22" rx="8" fill="#D4537E"/></svg>
 <svg data-picture="painting" viewBox="0 0 600 340" role="img" aria-label="A sheet of paper with colourful squiggles, three pots of paint and a brush"><rect width="600" height="340" fill="#E6F1FB"/><rect y="250" width="600" height="90" fill="#FAEEDA"/><rect y="244" width="600" height="8" fill="#D3D1C7"/><path d="M90 286 L170 196 H510 L470 286 Z" fill="#FFFFFF"/><path d="M190 260 q40-50 90-20 q50 30 100-14" fill="none" stroke="#D85A30" stroke-width="16" stroke-linecap="round"/><path d="M210 236 q60-30 110 0" fill="none" stroke="#EF9F27" stroke-width="12" stroke-linecap="round"/><circle cx="420" cy="232" r="22" fill="#378ADD"/><circle cx="246" cy="270" r="10" fill="#639922"/><rect x="110" y="292" width="46" height="36" rx="8" fill="#F1EFE8"/><ellipse cx="133" cy="294" rx="20" ry="6" fill="#D85A30"/><rect x="168" y="292" width="46" height="36" rx="8" fill="#F1EFE8"/><ellipse cx="191" cy="294" rx="20" ry="6" fill="#378ADD"/><rect x="226" y="292" width="46" height="36" rx="8" fill="#F1EFE8"/><ellipse cx="249" cy="294" rx="20" ry="6" fill="#639922"/><g transform="rotate(-30 470 150)"><rect x="462" y="80" width="14" height="110" rx="6" fill="#EF9F27"/><rect x="460" y="184" width="18" height="16" fill="#B4B2A9"/><path d="M460 200 h18 l-4 26 h-10 Z" fill="#D4537E"/></g></svg>
 </template>
 
@@ -235,8 +238,8 @@
   Poppy always shows them in this order, whatever order you type them in.
 
     card: text           the name of the activity. Starts the card
-    picture: painting    the picture on top. Leave the line out for a card with no picture
-    setup: text          the line under the name: "2 min to set up · keeps Maya busy for about 20 min"
+    picture: blanket-den the picture on top, by its name in the pictures block. Leave the line out for a card with no picture
+    setup: text          the line under the name: "3 min to set up · keeps Maya busy for about 20 min"
     grab: text           what to fetch. Poppy adds the bold "Grab:" herself
     then: text           what to do. Poppy adds the bold "Then:" herself
     why: text            one line on what it builds and why it suits this child today
@@ -246,7 +249,7 @@
   A LOOK BACK (several lines, one message). Start with lookback: and put the rest straight under it.
 
     lookback: text       the heading, shown in bold: "Maya's recent play"
-    - text               one activity per line, newest first: "- Tue 10 Nov: Elsa's ball gown, not a hit, 5 min"
+    - text               one activity per line, newest first: "- Tue 10 Nov: Elsa's ice palace, loved it, about 40 min"
     last: text           the closing line: a pattern she has spotted, then "Want to repeat one, or try something new?"
 
   A card or a look back ends at the next line that isn't one of its parts. Empty lines are fine anywhere.
@@ -263,39 +266,54 @@ show: 2
 
 # 1. The suggestion. This is the first screen. Poppy already knows Maya from before: she's 3 and Frozen mad
 time: 10:31
-mum: Help. Maya is climbing the walls. We're at home with her Frozen colouring book and some pencils.
+mum: Help. Maya is climbing the walls and I need to sit down. We're at home.
 
-card: Elsa's ball gown
-picture: painting
-setup: 2 min to set up · keeps Maya busy for about 20 min
-grab: the Frozen colouring book, the pencils
-then: open it at a page with Elsa on it, and tell Maya the ball is tonight and the dress has no colour yet.
-why: Maya would do anything for Elsa, and colouring builds her pencil grip, so it should hold her while you sit down.
+card: Elsa's ice palace
+picture: blanket-den
+setup: 3 min to set up · keeps Maya busy for about 20 min
+grab: two chairs, a big blanket, all the cushions
+then: drape the blanket over the chairs, cushions inside, and tell Maya it's Elsa's ice palace and it needs a queen.
+why: A palace of her own is pure pretend play, and it's Elsa, so it should hold her while you sit down.
 last: Tell me how it goes, or ask for something different.
 
-# 2. The review. Poppy asks once, an hour after the activity was meant to end
+# 2. The review. Poppy asks once, an hour after the 20 minutes were up
 time: 11:51
-poppy: How did "Elsa's ball gown" go? Tell me how long it lasted and what they made of it, and I'll remember for next time.
-mum: Five minutes. Then she threw the book across the room and said her first swear word. It rhymes with duck.
-poppy: Oh no. Saved: not a hit, 5 minutes, one new word. Was it the colouring, or just the moment?
-mum: The moment. She skipped her nap.
-poppy: Noted. Colouring gets another go on a day with a nap in it.
+poppy: How did "Elsa's ice palace" go? Tell me how long it lasted and what they made of it, and I'll remember for next time.
+time: 11:58
+mum: She LOVED it. Forty minutes. I drank a whole cup of tea while it was still hot.
+poppy: Noted: dens are a winner, and so is anything with Elsa in it. Next time I'll build on it. Was she happy in there on her own, or did she want you in the palace too?
+mum: On her own. I was not invited.
+poppy: Good to know. Saved.
 
 --- Two days later
 
-# 3. The look back. Only what really happened, and Poppy keeps the gist of how it went, not the exact words
-time: 19:05
-mum: Her gran wants to know what Maya has been up to this week. And what was that word again?
+# 3. The memory paying off. The mum doesn't explain anything again, and the new idea builds on the one that worked
+time: 16:10
+mum: At home again. Got another one?
+
+card: Snowballs for Olaf
+picture: ball-toss
+setup: 2 min to set up · keeps Maya busy for about 20 min
+grab: the laundry basket, and every pair of socks you can find, rolled into balls
+then: put the basket at the far end of the room and tell Maya it's the ice palace, Olaf is melting, and he needs snowballs thrown in, fast.
+why: She ran the palace on her own last time, so today the queen gets a job. All that throwing and fetching is good for her aim too.
+last: Tell me how it goes, or ask for something different.
+
+# 4. The look back. Only what happened in this story, newest first
+time: 17:05
+mum: Another hit. Half an hour of snowballs. Her gran wants to know what she's been up to this week.
 
 lookback: Maya's recent play
-- Tue 10 Nov: Elsa's ball gown, not a hit, 5 min
-last: Just the one so far. I keep the gist, not the gossip, so the word itself is yours to remember. Want to give it another go, or try something new?
+- Thu 12 Nov: Snowballs for Olaf, loved it, about 30 min
+- Tue 10 Nov: Elsa's ice palace, loved it, about 40 min
+last: Anything with Elsa in it is her favourite so far. Want to repeat one, or try something new?
 
-mum: Something new. Tomorrow. I need a lie down first.
+# The ending. Poppy only ever replies, so her sign-off answers the mum's thank you
+time: 17:06
+mum: Something new, tomorrow. Thank you, Poppy.
+poppy: Any time. I remember how it went so you don't have to. And if you ever want me to forget the lot, send /forget.
 
-# The ending
-poppy: That's me. One idea, with what you've got. I remember how it went, so you don't have to.
-poppy: Send */forget* and I delete everything I know about you. My WhatsApp number opens soon.
+--- Poppy's WhatsApp number opens soon
 </script>
 
 <script>
@@ -372,7 +390,7 @@ poppy: Send */forget* and I delete everything I know about you. My WhatsApp numb
       var why = [s('why'), s('safety')].filter(Boolean).join(' ');
       var cap = '<div class="cap">' + para(top) + para(steps) + para(why) + para(s('last')) + '</div>';
       if (!pic) return add('them', para(top) + para(steps) + para(why) + para(s('last'))); // no picture, so it goes as a plain message, as Poppy does
-      var svg = pic.cloneNode(true); svg.setAttribute('class', 'pic'); svg.setAttribute('preserveAspectRatio', 'xMidYMax slice');
+      var svg = pic.cloneNode(true); svg.setAttribute('class', 'pic'); svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
       add('them', svg.outerHTML + cap, 'card');
     } else {
       var list = b.items.map(function (t) { return '<span class="dot">&bull; ' + rich(t, 'strong') + '</span>'; }).join('');
