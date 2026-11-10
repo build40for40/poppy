@@ -40,6 +40,7 @@ The Twilio route does the same job with Twilio's shapes (`src/twilio.ts`):
 - **Repeats.** Twilio's `MessageSid` goes in the same inbox, so a repeat is dropped the same way.
 - **Who they are.** The identity is `twilio:` then the number, hashed, so the same phone on Meta and on Twilio is two separate brains. The object remembers which provider the person's messages come through and replies the same way.
 - **Replies.** Through Twilio's Messages API with the account SID and auth token, from the sender number the person last wrote to, split at 1,600 characters. The sandbox sends one message every three seconds, so the pieces of a long reply are sent 3.1 seconds apart (`TWILIO_SEND_GAP_MS`). There's no read receipt or typing indicator.
+- **Replies in the webhook's answer.** With `TWILIO_REPLY_INLINE` on, the Worker waits for the brain to answer (`answerNow`) and hands the reply back as TwiML, one `<Message>` per piece, the picture as `<Media>`. Twilio gives a webhook 15 seconds, so the brain only hands back what's ready within 12. A slower reply, a message that arrives while another is being answered, and the check-in nudge still go through the API.
 
 `/forget`, echo mode, sessions and reflection don't know which provider is in use.
 
@@ -120,6 +121,7 @@ One thing to know: a message that arrives while a reflection is running waits fo
 | `TWILIO_AUTH_TOKEN` | secret | Checks every Twilio webhook's signature and sends every Twilio reply |
 | `TWILIO_WHATSAPP_FROM` | secret | The sender, as `whatsapp:+` then the number. Several senders go in one value, separated by commas. Messages to any other number are ignored, and each person is answered from the number they wrote to |
 | `PUBLIC_BASE_URL` | var | Only for Twilio behind a tunnel: the tunnel's address, so the signature check knows the URL Twilio called |
+| `TWILIO_REPLY_INLINE` | var | `true` sends the reply to a Twilio message back in the webhook's own answer, as TwiML, and not through Twilio's API. On for now, because the Twilio account can't send through the API until its compliance profile is approved |
 | `WHATSAPP_API_VERSION` | var | The Graph API version, `v27.0` |
 | `LIVE_MODEL` | var | The model for live turns. New sessions pick up a change; open ones keep theirs |
 | `ECHO_MODE` | var | `true` sends the person's own text back and never calls Claude |

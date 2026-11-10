@@ -1,7 +1,7 @@
 import { BASE_PATH, error, HttpError, isPlainObject, json, readText } from "./http";
 import { PICTURE_ID, renderPng, starterPicture, type Picture } from "./pictures";
 import { shelfOf } from "./shelf";
-import { emptyTwiml, incomingTwilioMessage, signedUrlCandidates, twilioSenders, verifyTwilioSignature } from "./twilio";
+import { emptyTwiml, incomingTwilioMessage, signedUrlCandidates, twilioSenders, twimlReply, verifyTwilioSignature } from "./twilio";
 import { brainName, incomingMessages, safeEqual, verifySignature, type Address, type Incoming } from "./whatsapp";
 
 import type { UserBrain } from "./brain";
@@ -18,13 +18,17 @@ const TWILIO_PATH = `${BASE_PATH}/twilio`;
 const DEV_PATH = `${BASE_PATH}/dev`;
 const MAX_DEV_BYTES = 4 * 1024;
 const PICTURES_PATH = `${BASE_PATH}/pictures/`;
+/** Twilio gives a webhook 15 seconds. A reply that's ready inside this goes back in the webhook's answer. */
+const TWILIO_INLINE_WAIT_MS = 12_000;
+/** How much longer the Worker waits for the brain to hand the reply over before answering with nothing. */
+const TWILIO_INLINE_GRACE_MS = 1_500;
 
 // The generated stub types recurse too deeply on JSON, so the stub is typed from the class directly.
 type Rpc<T> = { [K in keyof T]: T[K] extends (...args: infer A) => infer R ? (...args: A) => Promise<Awaited<R>> : never };
-type Brain = Rpc<Pick<UserBrain, "receive" | "devMemory" | "devEnd" | "devAdvance">>;
+type Brain = Rpc<Pick<UserBrain, "receive" | "answerNow" | "devMemory" | "devEnd" | "devAdvance">>;
 
 export default {
-  async fetch(request, env): Promise<Response> {
+  async fetch(request, env, ctx): Promise<Response> {
     const { pathname, searchParams } = new URL(request.url);
     if (pathname.startsWith(PICTURES_PATH)) {
       if (request.method !== "GET" && request.method !== "HEAD") return error(405, "method_not_allowed", undefined, { Allow: "GET, HEAD" });
@@ -35,7 +39,7 @@ export default {
     try {
       if (dev) return await devTools(request, env);
       if (pathname === TWILIO_PATH) {
-        if (request.method === "POST") return await twilioWebhook(request, env);
+        if (request.method === "POST") return await twilioWebhook(request, env, ctx);
         return error(405, "method_not_allowed", undefined, { Allow: "POST" });
       }
       if (request.method === "GET") return handshake(searchParams, env);
@@ -81,8 +85,12 @@ async function webhook(request: Request, env: Env): Promise<Response> {
  * The fallback way in: Twilio's WhatsApp sandbox. Same shape as Meta's webhook: check the signature against the raw form body
  * before using any of it, hand the message to its sender's Durable Object, and answer with empty TwiML. The reply is sent
  * from the object's alarm through Twilio's API.
+ *
+ * With `TWILIO_REPLY_INLINE` set to "true" the reply goes back in this answer instead, as TwiML, for a Twilio account that
+ * isn't allowed to send through the API yet. The brain answers while Twilio waits, and a reply that isn't ready in time
+ * still goes through the API.
  */
-async function twilioWebhook(request: Request, env: Env): Promise<Response> {
+async function twilioWebhook(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   if (!env.TWILIO_AUTH_TOKEN) return error(503, "twilio_unavailable");
   const raw = await readText(request, MAX_TWILIO_BYTES);
   const params = new URLSearchParams(raw);
@@ -94,8 +102,19 @@ async function twilioWebhook(request: Request, env: Env): Promise<Response> {
   if (!verified) return error(401, "bad_signature");
 
   const message = incomingTwilioMessage(params, { accountSid: env.TWILIO_ACCOUNT_SID, senders: twilioSenders(env.TWILIO_WHATSAPP_FROM) });
-  if (message) await deliver(message, env);
-  return emptyTwiml();
+  if (!message) return emptyTwiml();
+  if (env.TWILIO_REPLY_INLINE?.trim().toLowerCase() !== "true") {
+    await deliver(message, env);
+    return emptyTwiml();
+  }
+
+  const answering = (await brainFor(message, env)).answerNow(message, TWILIO_INLINE_WAIT_MS);
+  // The brain carries on if this gives up waiting, so the turn is still saved.
+  ctx.waitUntil(answering.catch(() => {}));
+  const gaveUp = new Promise<null>((resolve) => setTimeout(() => resolve(null), TWILIO_INLINE_WAIT_MS + TWILIO_INLINE_GRACE_MS));
+  const pieces = await Promise.race([answering, gaveUp]);
+  if (!pieces) console.warn(JSON.stringify({ event: "twilio_inline_gave_up" }));
+  return twimlReply(pieces ?? []);
 }
 
 /**

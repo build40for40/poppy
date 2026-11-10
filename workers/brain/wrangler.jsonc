@@ -11,6 +11,10 @@
     "ECHO_MODE": "",
     // Only for Twilio behind a tunnel: the tunnel's address, so the signature check knows the URL Twilio called.
     "PUBLIC_BASE_URL": "",
+    // "true" sends the reply to a Twilio message back in the webhook's own answer (TwiML) and not through Twilio's API.
+    // It's on because the Twilio account can't send through the API until its compliance profile is approved. A reply
+    // that takes longer than Twilio waits, and the check-in nudge, still go through the API. Set it to "" once sending works.
+    "TWILIO_REPLY_INLINE": "true",
     // Where Twilio and Meta fetch the picture on a suggestion. They fetch it themselves, so it has to be public.
     "PICTURES_BASE_URL": "https://build40for40.com/poppy/api/pictures"
   },

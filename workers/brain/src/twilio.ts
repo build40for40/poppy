@@ -83,7 +83,31 @@ export function incomingTwilioMessage(params: URLSearchParams, config: { account
 
 /** What Twilio expects back from a messaging webhook: TwiML. An empty response sends nothing; the reply goes through the API. */
 export function emptyTwiml(): Response {
-  return new Response('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', { headers: { "Content-Type": "text/xml; charset=utf-8" } });
+  return twimlReply([]);
+}
+
+/** One outgoing Twilio message: a body, a picture, or a picture with the body as its caption. */
+export type TwilioPiece = { Body?: string; MediaUrl?: string };
+
+/** A reply laid out as the messages Twilio will carry it in: the picture first, with the text as its caption when it fits. */
+export function twilioPieces(text: string, picture?: string): TwilioPiece[] {
+  if (picture && text.length <= MAX_CAPTION_CHARS) return [{ Body: text, MediaUrl: picture }];
+  const pieces: TwilioPiece[] = picture ? [{ MediaUrl: picture }] : [];
+  pieces.push(...splitMessage(text, TWILIO_MAX_CHARS).map((body) => ({ Body: body })));
+  return pieces;
+}
+
+const escapeXml = (value: string) => value.replace(/[<>&"']/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[c]!);
+
+/**
+ * The answer to a Twilio webhook that carries the reply itself, one `<Message>` per piece. Twilio sends these on as the
+ * reply to the incoming message, without a call to its API.
+ */
+export function twimlReply(pieces: TwilioPiece[]): Response {
+  const messages = pieces
+    .map(({ Body, MediaUrl }) => `<Message>${Body ? `<Body>${escapeXml(Body)}</Body>` : ""}${MediaUrl ? `<Media>${escapeXml(MediaUrl)}</Media>` : ""}</Message>`)
+    .join("");
+  return new Response(`<?xml version="1.0" encoding="UTF-8"?><Response>${messages}</Response>`, { headers: { "Content-Type": "text/xml; charset=utf-8" } });
 }
 
 export const twilioMessagesUrl = (accountSid: string) => `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
@@ -93,12 +117,7 @@ export const twilioMessagesUrl = (accountSid: string) => `https://api.twilio.com
  * the picture goes first, with the reply as its caption when it fits. Twilio fetches the picture from the URL itself.
  */
 export async function sendTwilioText(config: TwilioConfig, toPhone: string, text: string, picture?: string): Promise<void> {
-  const messages: Record<string, string>[] = [];
-  if (picture && text.length <= MAX_CAPTION_CHARS) messages.push({ Body: text, MediaUrl: picture });
-  else {
-    if (picture) messages.push({ MediaUrl: picture });
-    messages.push(...splitMessage(text, TWILIO_MAX_CHARS).map((body) => ({ Body: body })));
-  }
+  const messages = twilioPieces(text, picture);
   for (const [index, fields] of messages.entries()) {
     if (index && config.gapMs) await new Promise((resolve) => setTimeout(resolve, config.gapMs));
     const response = await fetch(twilioMessagesUrl(config.accountSid), {
