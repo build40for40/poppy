@@ -1,6 +1,6 @@
 # What parents see on WhatsApp
 
-**Status: draft, 10 November 2026.** This is the message design from the Day 7 stream. Anything marked _proposed_ hasn't been agreed by the team or built yet. Once it's agreed, move it into `CLAUDE.md`'s Decided list and out of here.
+**Status: 10 November 2026.** This is the message design from the Day 7 stream. The shapes of the three message types are built into Poppy's prompt (`workers/brain/src/prompt.ts`, "Your three kinds of message"). Claude keeps each shape and fits the words to the family. Anything marked _proposed_ needs new code and hasn't been agreed by the team or built yet.
 
 Poppy sends parents three kinds of message, which go round in a loop: **suggest → review → look back → suggest again.** Every example below uses the same family: Ada, 3, into dinosaurs, and a parent making dinner.
 
@@ -84,7 +84,6 @@ Today, the last ten play notes already reach Claude in every chat. So Poppy can 
 
 _Proposed:_
 
-- **A fixed format for the history list**, so it reads the same every time.
 - **A "History" button** on the other messages.
 - **A way to see further back** than the last ten.
 
@@ -92,5 +91,6 @@ _Proposed:_
 
 - **Buttons and pictures:** whether Poppy sends them, which means interactive messages and Twilio message templates.
 - **Voice notes:** whether Poppy reads them. This is already open in `CLAUDE.md`.
-- **The history format,** and whether the history list needs its own command.
-- **Formatting:** the prompt asks for plain text. WhatsApp's `*bold*` would help the cards stand out, so decide whether to allow it.
+- **A history command:** whether the history list needs its own command.
+
+The prompt now allows WhatsApp's single-asterisk bold, but only for the activity name, the Grab and Then labels, and the heading of the history list.

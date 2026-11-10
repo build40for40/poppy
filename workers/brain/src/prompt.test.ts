@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { assembleContext } from "./prompt";
+import { assembleContext, LIVE_PROMPT } from "./prompt";
+
+describe("LIVE_PROMPT", () => {
+  it("lays out the three kinds of message parents get", () => {
+    for (const heading of ["## 1. A suggestion, before play", "## 2. A review, after play", "## 3. A look back, at what the child has done"]) {
+      expect(LIVE_PROMPT).toContain(heading);
+    }
+  });
+
+  it("only ever asks for WhatsApp's single-asterisk bold", () => {
+    expect(LIVE_PROMPT).not.toMatch(/\*\*[^*\n]+\*\*/);
+  });
+});
 
 describe("assembleContext", () => {
   const base = { user: { preferences: { language: "en" }, about: "# About me\n\nFake person.\n" }, interests: null, memory: null, plays: [], openPlay: null, sessionNotes: [], time: "14:05", today: "10 November 2026" };
