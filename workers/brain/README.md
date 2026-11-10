@@ -133,6 +133,8 @@ One thing to know: a message that arrives while a reflection is running waits fo
 
 For local runs they go in `.dev.vars` (copy `.dev.vars.example`). The root README has the runbook for each provider. The four marked local only exist for the terminal chat (`npm run chat`, `scripts/chat.mjs`). They're never set in `wrangler.jsonc` or by the deploy workflow, and a timing that's empty or isn't a positive number falls back to the constant.
 
+The deployed Worker gets its vars from `wrangler.jsonc` and its secrets from the deploy workflow, which runs on every push to `main` once the typecheck and tests pass. The root README's Deploying section has the detail.
+
 The secrets are typed by hand in `src/env.d.ts`, because `wrangler.jsonc` lists none as required. `npm run types` regenerates `worker-configuration.d.ts`; it also reads `.dev.vars`, so move that file aside while it runs to keep the result the same on every machine.
 
 ## Files

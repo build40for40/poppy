@@ -247,8 +247,18 @@ Message the sandbox number from the phone that joined. Echo mode, real replies a
 | A `POST` logs `200` and nothing comes back | Look for `whatsapp_send_failed` in the log. Code 63015 means that phone hasn't joined the sandbox, or its join ran out. `provider_not_configured` means `TWILIO_ACCOUNT_SID` or `TWILIO_WHATSAPP_FROM` is empty |
 | Nothing is logged at all | The message went to a different number, or the sandbox URL wasn't saved |
 
+## Deploying
+
+Merging to `main` is the deploy. Every push to `main`, a merged pull request or a direct push, runs the typecheck and the tests, and the Worker goes out to `build40for40.com/poppy` only if they pass. That one deploy carries the brain and the landing page, because `landing/index.html` is bundled into the Worker.
+
+- **Pull requests** run the same typecheck and tests and never deploy.
+- **Close together:** deploys run one at a time and a running one is never cancelled. A commit that's no longer the newest on `main` when its turn comes is skipped, because the newest one's run deploys it.
+- **By hand:** the fallback is the "Brain deploy" workflow's Run workflow button on `main`, or `gh workflow run brain-deploy.yml --ref main`. It runs the tests first too.
+- **Secrets:** the deploy sets the Worker secrets that exist as GitHub secrets and leaves the others as they are on the Worker.
+
+Both workflows are in `.github/workflows/`. Nobody runs `wrangler deploy` from a laptop.
+
 ## Not done yet
 
-- A deployed Worker. CI checks every push, and the deploy workflow is manual until a provider's secrets exist
 - A permanent access token (a System User in Meta Business Manager) to replace the 24 hour one
 - Onboarding, saved play locations and more than one child per number
