@@ -120,24 +120,25 @@ describe("runTurn", () => {
     expect(result.text).toBe("Sorry about that.");
   });
 
-  const sockSorting = { activity: "Fake sock sorting", setup: "Tip out the socks.", location: "home", props: ["socks"], minutes: 45, picture: "", pictureBrief: "" };
+  const sockSorting = { message: "Try sock sorting.", activity: "Fake sock sorting", setup: "Tip out the socks.", location: "home", props: ["socks"], minutes: 45, picture: "", pictureBrief: "" };
+  const { message: _, ...sockSortingDetails } = sockSorting;
   const lovedIt = { went: "loved", minutes: 50, feedback: "Sorted every sock twice." };
 
-  it("ends the reply at a suggestion, so Claude isn't asked to sign off twice", async () => {
-    const { claude, outcome } = run({ content: [{ type: "text", text: "Try sock sorting." }, { type: "tool_use", id: "toolu_start", name: "start_play", input: sockSorting }] });
+  it("sends the suggestion's own message and ends the reply there, whatever was written around the call", async () => {
+    const { claude, outcome } = run({ content: [{ type: "text", text: "Here's one, over to you!" }, { type: "tool_use", id: "toolu_start", name: "start_play", input: sockSorting }] });
     const result = await outcome;
     expect(claude.requests).toHaveLength(1);
     expect(result.text).toBe("Try sock sorting.");
     expect(result.plays).toEqual([{ type: "start", play: sockSorting }]);
-    expect(result.turns[0].role === "assistant" && result.turns[0].tool_calls).toEqual([{ id: "toolu_start", name: "start_play", input: sockSorting }]);
-    expect(result.messages.at(-1)).toEqual({ role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_start", content: "saved, waiting for their check-in" }] });
+    expect(result.turns).toEqual([{ role: "assistant", at: "2026-11-10T18:00:00Z", text: "Try sock sorting.", tool_calls: [{ id: "toolu_start", name: "start_play", input: sockSortingDetails }] }]);
+    expect(result.messages.at(-1)).toEqual({ role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_start", content: "sent to the parent, waiting for their check-in" }] });
   });
 
   it("records a check-in and then a new suggestion in one reply", async () => {
     const { outcome } = runWith(
       { playOpen: true },
       { content: [{ type: "tool_use", id: "toolu_check", name: "check_in", input: lovedIt }] },
-      { content: [{ type: "text", text: "Try sock sorting." }, { type: "tool_use", id: "toolu_start", name: "start_play", input: sockSorting }] },
+      { content: [{ type: "tool_use", id: "toolu_start", name: "start_play", input: sockSorting }] },
     );
     expect((await outcome).plays).toEqual([
       { type: "check_in", checkIn: lovedIt },

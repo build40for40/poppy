@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { UserBrain } from "./brain";
 import { applyPlayEvents, nudgeDue, NUDGE_AFTER_MINUTES, openPlay, parseCheckIn, parseStart, type PlayStart } from "./plays";
 
-const sockSorting: PlayStart = { activity: "Fake sock sorting", setup: "Tip out the socks.", location: "home", props: ["socks"], minutes: 45, picture: "", pictureBrief: "" };
+const sockSorting: PlayStart = { message: "Try fake sock sorting.", activity: "Fake sock sorting", setup: "Tip out the socks.", location: "home", props: ["socks"], minutes: 45, picture: "", pictureBrief: "" };
 
 function inVault<T>(name: string, run: (sql: SqlStorage) => T): Promise<T> {
   return runInDurableObject(env.USER_BRAIN.get(env.USER_BRAIN.idFromName(name)), (brain: UserBrain, state) => {

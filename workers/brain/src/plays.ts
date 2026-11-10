@@ -12,11 +12,14 @@ const MAX_NAME = 80;
 const MAX_TEXT = 1_500;
 const MAX_PROPS = 12;
 const MAX_BRIEF = 300;
+const MAX_MESSAGE = 3_000;
 const WENT = ["loved", "fine", "flop"] as const;
 
 export type Went = (typeof WENT)[number];
 
 export interface PlayStart {
+  /** The whole suggestion as the parent reads it. Never saved to the play note: it is the reply. */
+  message: string;
   activity: string;
   setup: string;
   location: string;
@@ -58,7 +61,9 @@ const oneLine = (value: unknown, max: number) => clean(value, max).replace(/\s+/
 
 /** Checks a `start_play` call. Returns what to save, or what was wrong with it for Claude to fix. */
 export function parseStart(input: unknown): PlayStart | string {
-  if (!isPlainObject(input)) return "start_play needs {activity, setup, location, props, minutes}.";
+  if (!isPlainObject(input)) return "start_play needs {message, activity, setup, location, props, minutes}.";
+  const message = clean(input.message, MAX_MESSAGE);
+  if (!message) return "start_play needs message: the whole suggestion as the parent will read it, never empty.";
   const activity = oneLine(input.activity, MAX_NAME);
   const setup = clean(input.setup, MAX_TEXT);
   const location = oneLine(input.location, MAX_NAME);
@@ -67,7 +72,7 @@ export function parseStart(input: unknown): PlayStart | string {
   const minutes = typeof input.minutes === "number" && Number.isFinite(input.minutes) ? Math.min(Math.max(Math.round(input.minutes), 5), MAX_PLAY_MINUTES) : DEFAULT_PLAY_MINUTES;
   const picture = oneLine(input.picture, MAX_NAME).toLowerCase();
   const pictureBrief = picture ? "" : oneLine(input.picture_brief, MAX_BRIEF);
-  return { activity, setup, location, props, minutes, picture, pictureBrief };
+  return { message, activity, setup, location, props, minutes, picture, pictureBrief };
 }
 
 /** Checks a `check_in` call. Returns what to save, or what was wrong with it for Claude to fix. */

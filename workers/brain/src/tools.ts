@@ -21,15 +21,16 @@ export const tools = [
   {
     name: "start_play",
     description:
-      "Record the activity you are suggesting, in the same reply as the suggestion. It opens a play session that waits for the parent's check-in. Only one is open at a time: calling it again in this conversation replaces the suggestion they turned down.",
+      "Send the parent a suggestion and record it. The message field is sent to them as your whole reply, and nothing you write outside this call reaches them, so write nothing else. It opens a play session that waits for the parent's check-in. Only one is open at a time: calling it again in this conversation replaces the suggestion they turned down.",
     strict: true,
     input_schema: {
       type: "object",
       additionalProperties: false,
-      required: ["activity", "setup", "location", "props", "minutes", "picture", "picture_brief"],
+      required: ["message", "activity", "setup", "location", "props", "minutes", "picture", "picture_brief"],
       properties: {
+        message: { type: "string", description: "The whole WhatsApp message for the parent, in the suggestion shape, from the activity name to the closing line. Never empty." },
         activity: { type: "string", description: "A short name for the activity, a few words. Never empty." },
-        setup: { type: "string", description: "How the parent sets it up, as you told them. Never empty." },
+        setup: { type: "string", description: "How the parent sets it up, as the message tells them. Never empty." },
         location: { type: "string", description: "Where they are, in the parent's words, like home, the garden or the park. Never empty." },
         props: { type: "array", items: { type: "string" }, description: "The things it needs. Empty when it needs nothing." },
         minutes: { type: "integer", description: "How long it's meant to keep the child busy, in minutes, from 5 to 180." },
