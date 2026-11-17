@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="A bottomless toy box that remembers your kid. Poppy is a play assistant for parents: she suggests something to play, remembers how it went, and makes the next idea fit better. Try her right here.">
+<meta name="description" content="A bottomless toy box that remembers your kid. Poppy is a play assistant for parents: she suggests something to play, remembers how it went, and makes the next idea fit better. Join the waiting list.">
 <title>Poppy, the toy box that remembers</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap">
 <style>
@@ -201,6 +201,26 @@
     .compose { padding-bottom: max(8px, env(safe-area-inset-bottom, 0px)); }
   }
   @media (max-width: 899px) and (prefers-reduced-motion: reduce) { #log .row { opacity: 1; transform: none; transition: none; } }
+  /* The waiting list. The Try Poppy buttons open this instead of the live chat while WAITLIST is on in the script. Sign-ups go to the site's access form. */
+  .wait { box-sizing: border-box; width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0; border: 0; border-radius: 22px; background: var(--bar); color: var(--chat-ink); font-family: var(--body); box-shadow: 0 24px 60px rgba(20, 5, 20, 0.45); }
+  .wait::backdrop { background: rgba(43, 18, 48, 0.6); }
+  .wait .in { position: relative; padding: 26px 22px 20px; }
+  .wait .x { position: absolute; top: 6px; right: 6px; margin: 0; }
+  .wait .x button { width: 44px; height: 44px; border: 0; background: none; color: var(--chat-soft); font-size: 28px; line-height: 1; cursor: pointer; }
+  .wait .eyebrow { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--chat-soft); }
+  .wait h2 { margin: 8px 40px 0 0; font-family: var(--display); font-weight: 800; font-size: 28px; line-height: 1.06; letter-spacing: -0.02em; text-wrap: balance; }
+  .wait p { margin: 10px 0 0; font-size: 16px; line-height: 1.4; }
+  .wait .soft { color: var(--chat-soft); font-size: 13px; }
+  .wait form.join { display: flex; flex-direction: column; gap: 12px; margin-top: 18px; }
+  .wait label.f { display: flex; flex-direction: column; gap: 4px; font-size: 14px; font-weight: 700; }
+  .wait input[type="text"], .wait input[type="email"] { box-sizing: border-box; width: 100%; font: inherit; font-size: 16px; font-weight: 400; color: var(--chat-ink); background: var(--chat-bg); border: 1px solid var(--bar-line); border-radius: 12px; padding: 11px 12px; }
+  .wait label.c { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+  .wait label.c input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--poppy); }
+  .wait .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  .wait .go { font: inherit; font-weight: 700; font-size: 17px; min-height: 50px; border: 0; border-radius: 999px; background: var(--sun); color: var(--sun-ink); cursor: pointer; }
+  .wait .go:disabled { opacity: 0.6; cursor: wait; }
+  .wait .status { min-height: 1.2em; margin: 0; font-size: 14px; font-weight: 700; }
+  .wait a { color: inherit; }
 </style>
 </head>
 <body>
@@ -210,8 +230,8 @@
 <div class="pitch">
   <h1>A bottomless toy box that <em>remembers</em> your kid.</h1>
   <p>Poppy is a play assistant for parents. Tell her what your kid's into and where you are, and she suggests something to play. She remembers how it went, so every idea fits better than the last.</p>
-  <p class="wide-only">Poppy lives in WhatsApp. Tell her it's all kicking off and she sends one thing to do. Or try her right here.</p>
-  <button type="button" class="chip" data-try>Try Poppy yourself</button>
+  <p class="wide-only">Poppy lives in WhatsApp. Tell her it's all kicking off and she sends one thing to do.</p>
+  <button type="button" class="chip" data-try>Join the waiting list</button>
 </div>
 <div class="phone">
 <div class="cam" aria-hidden="true"></div>
@@ -236,7 +256,7 @@
   <div class="log" id="log"></div>
   <div class="log" id="live" role="log" aria-live="polite" aria-label="Your chat with Poppy"></div>
   <div class="finale" id="finale">
-    <button type="button" class="chip try" data-try>Try Poppy yourself</button>
+    <button type="button" class="chip try" data-try>Join the waiting list</button>
     <a class="chip go" id="watch" href="https://www.twitch.tv/40for40">Watch Poppy being built</a>
     <div class="note">Poppy's real messages. A made up family.</div>
   </div>
@@ -244,7 +264,7 @@
   <div class="bar">
     <div class="acts">
       <div class="chips" id="chips"><span class="hint"><i></i>Scroll to see how it went</span></div>
-      <button type="button" class="chip try" data-try aria-label="Try Poppy yourself">Try Poppy<span class="yourself"> yourself</span></button>
+      <button type="button" class="chip try" data-try aria-label="Join the waiting list">Join the <span class="yourself">waiting </span>list</button>
     </div>
     <div class="note">Poppy's real messages. A made up family.</div>
   </div>
@@ -260,6 +280,32 @@
 </div>
 </div>
 </div>
+
+<dialog class="wait" id="wait" aria-labelledby="wait-h">
+  <div class="in">
+    <form method="dialog" class="x"><button aria-label="Close">&times;</button></form>
+    <div id="wait-ask">
+      <p class="eyebrow">Waiting list</p>
+      <h2 id="wait-h">Due to insane demand we have to put up a waiting list.</h2>
+      <p>Leave your email and Poppy will be in touch as soon as there's room in the toy box.</p>
+      <form class="join" id="wait-form" action="/api/forms/access" method="post">
+        <input type="hidden" name="app" value="poppy">
+        <div class="hp" aria-hidden="true"><label>Website <input name="website" tabindex="-1" autocomplete="off"></label></div>
+        <label class="f">Your name<input type="text" name="name" required maxlength="200" autocomplete="name"></label>
+        <label class="f">Email<input type="email" name="email" required maxlength="254" autocomplete="email"></label>
+        <label class="c"><input type="checkbox" name="newsletter" value="yes"><span>Send me the 40 for 40 newsletter too.</span></label>
+        <button class="go" type="submit">Join the waiting list</button>
+        <p class="status" id="wait-status" role="status"></p>
+      </form>
+    </div>
+    <div id="wait-done" hidden>
+      <p class="eyebrow">Sorted</p>
+      <h2>You're on the list.</h2>
+      <p>We'll email you the moment there's room. Thanks for being patient with all this insane demand.</p>
+    </div>
+    <p class="soft">We only use your details for the waiting list. See our <a href="/privacy/">privacy policy</a>.</p>
+  </div>
+</dialog>
 
 <!--
   POPPY'S PICTURES. These are drawn by Poppy's own code (the starter pictures in the poppy repo), copied here as they are.
@@ -370,6 +416,9 @@ poppy: Any time. I remember how it went so you don't have to. And if you ever wa
 <script>
 (function () {
   var STEP = 150; // pixels of scrolling per message
+
+  // true: the Try Poppy buttons say "Join the waiting list" and open the sign-up. false: they open the live chat (put their old labels back too).
+  var WAITLIST = true;
 
   // ---- THE LIVE CHAT ("Try Poppy"). Everything you might want to change about it is here. ----
   var API_PATH = '/poppy/api/web';              // where a visitor's message is sent
@@ -794,7 +843,26 @@ poppy: Any time. I remember how it went so you don't have to. And if you ever wa
     var back = function () { window.scrollTo(0, storyY); shown = -1; update(); };
     back(); setTimeout(back, 0); // again once the page is tall again, so the story is where they left it
   }
-  [].forEach.call(document.querySelectorAll('[data-try]'), function (b) { b.addEventListener('click', openLive); });
+  // ---- The waiting list. Sign-ups go to the site's access form, which redirects to #requested when there's no script. ----
+  var wait = document.getElementById('wait'), waitForm = document.getElementById('wait-form'), waitStatus = document.getElementById('wait-status');
+  function openWait() { if (wait.showModal) wait.showModal(); else wait.setAttribute('open', ''); }
+  function waitDone() { document.getElementById('wait-ask').hidden = true; document.getElementById('wait-done').hidden = false; }
+  wait.addEventListener('click', function (e) { if (e.target === wait) wait.close(); });
+  if (location.hash === '#requested') { waitDone(); openWait(); }
+  waitForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var button = waitForm.querySelector('.go');
+    button.disabled = true; waitStatus.textContent = 'Sending\u2026';
+    fetch(waitForm.action, { method: 'POST', body: new FormData(waitForm), headers: { Accept: 'application/json' } })
+      .then(function (res) { return res.ok ? null : res.text().then(function (t) { throw new Error(t || 'That didn\u2019t send. Try again in a moment.'); }); })
+      .then(function () { waitStatus.textContent = ''; waitDone(); })
+      .catch(function (err) {
+        waitStatus.textContent = err instanceof TypeError ? 'You look offline. Check your connection and try again.' : err.message;
+        button.disabled = false;
+      });
+  });
+
+  [].forEach.call(document.querySelectorAll('[data-try]'), function (b) { b.addEventListener('click', WAITLIST ? openWait : openLive); });
   document.getElementById('back').addEventListener('click', closeLive);
   document.getElementById('fresh').addEventListener('click', newChat);
   form.addEventListener('submit', function (e) { e.preventDefault(); send(say.value); });
